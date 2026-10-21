@@ -3,294 +3,595 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>cleanroom: clean-room rewrites for Claude Code</title>
-<meta name="description" content="A Claude Code plugin that removes leftover third-party code from your project and rewrites it through an isolated clean-room process, with human sign-off and an audit trail.">
+<title>cleanroom · clean-room rewrites for Claude Code</title>
+<meta name="description" content="A Claude Code plugin that finds leftover third-party code in your project and rewrites it in a sealed container, with two similarity checks, human sign-off and a tamper-evident audit trail.">
+<meta property="og:title" content="cleanroom · clean-room rewrites for Claude Code">
+<meta property="og:description" content="Find leftover upstream code. Rewrite it behind a physical wall. Prove it's gone.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
 :root{
-  --bg:#fbfaf7;--surface:#ffffff;--ink:#1d1f24;--muted:#5b616e;--line:#e4e1d9;
-  --accent:#0f6e5a;--accent-ink:#ffffff;--accent-soft:#e3f2ee;--warn:#8a4b00;--warn-soft:#fdf1e1;
-  --dirty:#a34a28;--dirty-soft:#f9e9e2;--clean:#0f6e5a;--clean-soft:#e3f2ee;--code:#f3f1ec;
-  --radius:10px;--max:1040px;
-  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
-  --mono:ui-monospace,SFMono-Regular,"Cascadia Code",Menlo,Consolas,monospace;
+  --bg:#07090d;--bg2:#0c1016;--panel:#10151d;--panel2:#141b25;--line:#1f2a37;--line2:#2a3747;
+  --ink:#e9eef5;--muted:#8c99ab;--dim:#5d6b7e;
+  --mint:#3dffb5;--mint2:#1fd496;--mint-glow:rgba(61,255,181,.22);
+  --rust:#ff6b4a;--rust-glow:rgba(255,107,74,.2);--amber:#ffc35c;--violet:#9d8cff;
+  --grid:rgba(120,160,200,.07);
+  --code:#0a0e14;
+  --radius:14px;--max:1120px;
+  --display:"Space Grotesk",ui-sans-serif,system-ui,sans-serif;
+  --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  color-scheme:dark;
 }
-@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
-  --bg:#14161a;--surface:#1b1e23;--ink:#e8e6e1;--muted:#a3a8b3;--line:#2c3038;
-  --accent:#4cc2a4;--accent-ink:#0b1714;--accent-soft:#16302a;--warn:#f0b56b;--warn-soft:#2e2416;
-  --dirty:#e58a65;--dirty-soft:#33221b;--clean:#4cc2a4;--clean-soft:#16302a;--code:#22262c;}}
-:root[data-theme="dark"]{
-  --bg:#14161a;--surface:#1b1e23;--ink:#e8e6e1;--muted:#a3a8b3;--line:#2c3038;
-  --accent:#4cc2a4;--accent-ink:#0b1714;--accent-soft:#16302a;--warn:#f0b56b;--warn-soft:#2e2416;
-  --dirty:#e58a65;--dirty-soft:#33221b;--clean:#4cc2a4;--clean-soft:#16302a;--code:#22262c;}
+:root[data-theme="light"]{
+  --bg:#f6f8fb;--bg2:#eef2f7;--panel:#ffffff;--panel2:#f3f6fa;--line:#dde4ec;--line2:#c9d3df;
+  --ink:#0d1520;--muted:#4b5a6d;--dim:#7a8798;
+  --mint:#00a971;--mint2:#008f60;--mint-glow:rgba(0,169,113,.16);
+  --rust:#d9461f;--rust-glow:rgba(217,70,31,.12);--amber:#a86a00;--violet:#5b48d9;
+  --grid:rgba(30,60,100,.06);--code:#0b1018;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]){
+  --bg:#f6f8fb;--bg2:#eef2f7;--panel:#ffffff;--panel2:#f3f6fa;--line:#dde4ec;--line2:#c9d3df;
+  --ink:#0d1520;--muted:#4b5a6d;--dim:#7a8798;
+  --mint:#00a971;--mint2:#008f60;--mint-glow:rgba(0,169,113,.16);
+  --rust:#d9461f;--rust-glow:rgba(217,70,31,.12);--amber:#a86a00;--violet:#5b48d9;
+  --grid:rgba(30,60,100,.06);--code:#0b1018;color-scheme:light;}}
 *{box-sizing:border-box}
-html{scroll-behavior:smooth}
-body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);-webkit-text-size-adjust:100%}
-a{color:var(--accent)}
-.wrap{max-width:var(--max);margin:0 auto;padding:0 16px}
-header.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
-header.top .wrap{display:flex;align-items:center;gap:16px;height:56px}
-.brand{font-weight:700;letter-spacing:-.01em;text-decoration:none;color:var(--ink);display:flex;align-items:center;gap:8px}
-.brand svg{flex:none}
-nav.links{display:flex;gap:18px;margin-left:auto;font-size:14px}
-nav.links a{color:var(--muted);text-decoration:none}
-nav.links a:hover{color:var(--ink)}
-#theme{margin-left:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:4px 8px;font:inherit;font-size:13px;cursor:pointer}
-@media (max-width:720px){nav.links{display:none}#theme{margin-left:auto}}
-.hero{padding-top:64px;padding-bottom:40px}
-.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
-h1{font-size:clamp(30px,5vw,48px);line-height:1.1;letter-spacing:-.02em;margin:10px 0 16px;max-width:20ch}
-.lede{font-size:clamp(17px,2.2vw,20px);color:var(--muted);max-width:62ch;margin:0 0 28px}
-.cta{display:flex;flex-wrap:wrap;gap:12px}
-.btn{display:inline-block;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;border:1px solid var(--line);color:var(--ink);background:var(--surface)}
-.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
-section{padding:44px 0;border-top:1px solid var(--line)}
-h2{font-size:clamp(22px,3vw,30px);letter-spacing:-.01em;margin:0 0 8px}
-h3{font-size:18px;margin:26px 0 6px}
-.sub{color:var(--muted);margin:0 0 24px;max-width:70ch}
-.grid{display:grid;gap:16px}
-.g3{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
-.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
-.card h3{margin-top:0}
-.card p{margin:0;color:var(--muted)}
-pre,code{font-family:var(--mono);font-size:14px}
-code{background:var(--code);padding:1px 5px;border-radius:5px}
-pre{background:var(--code);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:10px 0 16px;line-height:1.5;position:relative}
-pre code{background:none;padding:0}
-.copy{position:absolute;top:8px;right:8px;font:12px var(--sans);border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:6px;padding:2px 8px;cursor:pointer}
-.note{border-left:4px solid var(--warn);background:var(--warn-soft);padding:12px 16px;border-radius:0 var(--radius) var(--radius) 0;margin:16px 0}
-.note strong{color:var(--warn)}
-table{width:100%;border-collapse:collapse;font-size:15px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
-th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
-th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--code)}
-tr:last-child td{border-bottom:none}
-.tablewrap{overflow-x:auto;margin:12px 0 8px}
-ol.steps{list-style:none;padding:0;margin:0;counter-reset:s}
-ol.steps>li{counter-increment:s;position:relative;padding:0 0 26px 52px;border-left:2px solid var(--line);margin-left:16px}
-ol.steps>li:last-child{border-left-color:transparent;padding-bottom:0}
-ol.steps>li::before{content:counter(s);position:absolute;left:-17px;top:-2px;width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-weight:700;display:grid;place-items:center;font-size:15px}
-ol.steps h3{margin:0 0 4px}
-ol.steps p{margin:4px 0;color:var(--muted)}
-.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:6px;vertical-align:2px}
-.tag.you{background:var(--warn-soft);color:var(--warn)}
-.diagram{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
-.diagram{overflow-x:auto}
-.diagram svg{width:100%;min-width:720px;height:auto;display:block}
-.dt{fill:var(--ink);font:600 14px var(--sans)}
-.ds{fill:var(--muted);font:12.5px var(--sans)}
-details{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin:10px 0}
-summary{cursor:pointer;font-weight:600}
-details p{color:var(--muted);margin:8px 0 2px}
-footer{border-top:1px solid var(--line);padding:28px 0 48px;color:var(--muted);font-size:14px}
+html{scroll-behavior:smooth;scroll-padding-top:72px}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.65 var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+a{color:var(--mint)}
+::selection{background:var(--mint);color:#04140d}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 20px}
+@media (max-width:520px){.wrap{padding:0 16px}}
+
+/* ---------- nav ---------- */
+.top{position:sticky;top:0;z-index:20;background:color-mix(in srgb,var(--bg) 78%,transparent);backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);border-bottom:1px solid var(--line)}
+.top .wrap{display:flex;align-items:center;gap:20px;height:60px}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font:700 18px/1 var(--display);letter-spacing:-.02em}
+.logo{width:26px;height:26px;border-radius:7px;position:relative;background:linear-gradient(90deg,var(--rust) 0 46%,transparent 46% 54%,var(--mint) 54%);box-shadow:0 0 18px var(--mint-glow)}
+.logo::after{content:"";position:absolute;left:50%;top:-3px;bottom:-3px;width:2px;transform:translateX(-50%);background:var(--ink);border-radius:2px}
+.navlinks{display:flex;gap:22px;margin-left:auto;font-size:14px}
+.navlinks a{color:var(--muted);text-decoration:none;transition:color .15s}
+.navlinks a:hover{color:var(--ink)}
+.iconbtn{border:1px solid var(--line2);background:var(--panel);color:var(--ink);border-radius:9px;height:34px;min-width:34px;display:grid;place-items:center;cursor:pointer;font:500 13px var(--sans);padding:0 10px;text-decoration:none}
+.iconbtn:hover{border-color:var(--mint)}
+@media (max-width:860px){.navlinks{display:none}.top .actions{margin-left:auto}}
+.actions{display:flex;gap:8px}
+
+/* ---------- hero ---------- */
+.hero{position:relative;padding:84px 0 56px;overflow:hidden}
+.hero::before{content:"";position:absolute;inset:0;background-image:linear-gradient(var(--grid) 1px,transparent 1px),linear-gradient(90deg,var(--grid) 1px,transparent 1px);background-size:44px 44px;mask-image:radial-gradient(ellipse 80% 70% at 50% 30%,#000 30%,transparent 75%);-webkit-mask-image:radial-gradient(ellipse 80% 70% at 50% 30%,#000 30%,transparent 75%);pointer-events:none}
+.hero::after{content:"";position:absolute;width:720px;height:720px;right:-220px;top:-260px;background:radial-gradient(circle,var(--mint-glow),transparent 62%);pointer-events:none}
+.hero .wrap{position:relative;display:grid;grid-template-columns:minmax(0,.92fr) minmax(0,1.08fr);gap:44px;align-items:center}
+@media (max-width:960px){.hero .wrap{grid-template-columns:1fr}.hero{padding-top:56px}}
+.pill{display:inline-flex;align-items:center;gap:8px;border:1px solid var(--line2);background:color-mix(in srgb,var(--panel) 70%,transparent);border-radius:999px;padding:5px 12px 5px 6px;font:500 13px var(--sans);color:var(--muted)}
+.pill b{white-space:nowrap;background:var(--mint);color:#04140d;border-radius:999px;padding:1px 8px;font-size:12px;font-weight:600}
+h1{font:700 clamp(38px,6.2vw,68px)/1.02 var(--display);letter-spacing:-.035em;margin:22px 0 20px}
+h1 .strike{position:relative;color:var(--dim);white-space:nowrap}
+h1 .strike::after{content:"";position:absolute;left:-2%;right:-2%;top:55%;height:.09em;background:var(--rust);transform:scaleX(0);transform-origin:left;animation:strike .7s .6s cubic-bezier(.6,0,.2,1) forwards}
+h1 .glow{background:linear-gradient(100deg,var(--mint),#7dffd6 45%,var(--mint2));-webkit-background-clip:text;background-clip:text;color:transparent}
+@keyframes strike{to{transform:scaleX(1)}}
+.lede{font-size:clamp(17px,2vw,19px);color:var(--muted);max-width:56ch;margin:0 0 30px}
+.lede b{color:var(--ink);font-weight:600}
+.cta{display:flex;flex-wrap:wrap;gap:12px;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:8px;padding:12px 18px;border-radius:11px;font:600 15px var(--sans);text-decoration:none;border:1px solid var(--line2);color:var(--ink);background:var(--panel);transition:transform .15s,box-shadow .2s,border-color .2s}
+.btn:hover{transform:translateY(-1px);border-color:var(--mint)}
+.btn.primary{background:var(--mint);border-color:var(--mint);color:#04140d;box-shadow:0 8px 30px var(--mint-glow)}
+.btn.primary:hover{box-shadow:0 10px 40px var(--mint-glow)}
+.installline{display:flex;align-items:center;gap:10px;margin-top:22px;font:500 13.5px var(--mono);color:var(--muted);flex-wrap:wrap}
+.installline code{color:var(--ink);background:var(--panel);border:1px solid var(--line);padding:6px 10px;border-radius:8px}
+
+/* hero visual: the wall */
+.wall{position:relative;border:1px solid var(--line2);border-radius:18px;background:linear-gradient(180deg,var(--panel),var(--bg2));box-shadow:0 30px 80px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.02) inset;overflow:hidden}
+.wall-head{display:flex;align-items:center;gap:8px;padding:12px 14px;border-bottom:1px solid var(--line);font:500 12px var(--mono);color:var(--dim)}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--line2)}
+.wall-head .file{margin-left:8px;color:var(--muted)}
+.panes{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);position:relative}
+.pane{padding:14px 14px 16px;font:11.5px/1.8 var(--mono);min-height:250px;position:relative;overflow:hidden}
+.pane.left{background:linear-gradient(180deg,var(--rust-glow),transparent 70%)}
+.pane.right{background:linear-gradient(180deg,var(--mint-glow),transparent 70%)}
+.pane .label{display:flex;justify-content:space-between;align-items:center;font:600 11px var(--sans);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px}
+.pane.left .label{color:var(--rust)}
+.pane.right .label{color:var(--mint)}
+.score{font:600 12px var(--mono);border-radius:6px;padding:1px 7px;letter-spacing:0;text-transform:none}
+.pane.left .score{background:var(--rust-glow);color:var(--rust)}
+.pane.right .score{background:var(--mint-glow);color:var(--mint)}
+.ln{white-space:pre;color:var(--muted);opacity:.9}
+.ln .k{color:var(--violet)}.ln .s{color:var(--amber)}.ln .c{color:var(--dim);font-style:italic}
+.pane.left .hit{background:color-mix(in srgb,var(--rust) 22%,transparent);border-radius:3px;color:var(--ink);box-shadow:-3px 0 0 var(--rust)}
+.divider{position:absolute;left:50%;top:0;bottom:0;width:2px;transform:translateX(-50%);background:linear-gradient(var(--line2),var(--ink),var(--line2));z-index:2}
+.divider::before{content:"WALL";position:absolute;top:50%;left:50%;transform:translate(-50%,-50%) rotate(-90deg);font:700 10px var(--mono);letter-spacing:.3em;background:var(--panel);color:var(--ink);padding:4px 8px;border:1px solid var(--line2);border-radius:6px;white-space:nowrap}
+.scan{position:absolute;left:0;width:50%;height:46px;background:linear-gradient(180deg,transparent,var(--rust-glow),transparent);border-top:1px solid color-mix(in srgb,var(--rust) 50%,transparent);animation:scan 3.6s ease-in-out infinite;pointer-events:none;top:40px}
+@keyframes scan{0%{transform:translateY(0)}50%{transform:translateY(190px)}100%{transform:translateY(0)}}
+.write .ln{opacity:0;transform:translateX(-6px);animation:wl .4s forwards}
+@keyframes wl{to{opacity:.95;transform:none}}
+.wall-foot{display:grid;grid-template-columns:repeat(4,1fr);border-top:1px solid var(--line);font:500 11.5px var(--mono)}
+.wall-foot div{padding:10px 12px;border-right:1px solid var(--line);color:var(--muted);display:flex;gap:6px;align-items:center}
+.wall-foot div:last-child{border-right:0}
+.ok{color:var(--mint);font-weight:700}
+@media (max-width:560px){.panes{grid-template-columns:1fr}.divider{display:none}.scan{width:100%}.pane{min-height:0}.wall-foot{grid-template-columns:1fr 1fr}.wall-foot div:nth-child(2){border-right:0}.wall-foot div:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+
+/* ---------- stats ---------- */
+.stats{border-top:1px solid var(--line);border-bottom:1px solid var(--line);background:var(--bg2)}
+.stats .wrap{display:grid;grid-template-columns:repeat(4,1fr)}
+.stat{padding:26px 18px;border-right:1px solid var(--line)}
+.stat:last-child{border-right:0}
+.stat .n{font:700 clamp(28px,4vw,40px)/1 var(--display);letter-spacing:-.03em}
+.stat .n em{font-style:normal;color:var(--mint)}
+.stat .t{color:var(--muted);font-size:14px;margin-top:8px}
+@media (max-width:760px){.stats .wrap{grid-template-columns:1fr 1fr}.stat:nth-child(2){border-right:0}.stat:nth-child(-n+2){border-bottom:1px solid var(--line)}}
+
+/* ---------- sections ---------- */
+section{padding:92px 0;position:relative}
+.kicker{font:600 12.5px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--mint);display:flex;align-items:center;gap:10px}
+.kicker::before{content:"";width:22px;height:1px;background:var(--mint)}
+h2{font:700 clamp(28px,4.2vw,46px)/1.08 var(--display);letter-spacing:-.03em;margin:14px 0 14px;max-width:22ch}
+.sub{color:var(--muted);font-size:17px;max-width:64ch;margin:0 0 40px}
+h3{font:600 19px/1.3 var(--display);letter-spacing:-.01em;margin:0 0 8px}
+
+/* features */
+.features{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+@media (max-width:900px){.features{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.features{grid-template-columns:1fr}}
+.feat{position:relative;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px;overflow:hidden;transition:border-color .2s,transform .2s}
+.feat:hover{border-color:var(--line2);transform:translateY(-2px)}
+.feat::before{content:"";position:absolute;inset:0;background:radial-gradient(400px circle at var(--mx,50%) var(--my,0%),var(--mint-glow),transparent 45%);opacity:0;transition:opacity .25s;pointer-events:none}
+.feat:hover::before{opacity:1}
+.feat .ic{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:var(--panel2);border:1px solid var(--line2);margin-bottom:16px;color:var(--mint)}
+.feat p{margin:0;color:var(--muted);font-size:15px}
+
+/* pipeline */
+.pipe{display:grid;grid-template-columns:300px 1fr;gap:22px;align-items:start}
+@media (max-width:860px){.pipe{grid-template-columns:1fr}}
+.stages{display:flex;flex-direction:column;gap:6px;position:relative}
+@media (max-width:860px){.stages{flex-direction:row;overflow-x:auto;padding-bottom:6px;scrollbar-width:thin}}
+.stage{display:flex;align-items:center;gap:12px;text-align:left;border:1px solid transparent;background:transparent;color:var(--muted);padding:11px 12px;border-radius:11px;cursor:pointer;font:500 15px var(--sans);flex:none;transition:background .15s,color .15s,border-color .15s}
+.stage:hover{background:var(--panel);color:var(--ink)}
+.stage[aria-selected="true"]{background:var(--panel);border-color:var(--line2);color:var(--ink)}
+.stage .num{width:28px;height:28px;border-radius:8px;display:grid;place-items:center;font:600 12.5px var(--mono);background:var(--panel2);border:1px solid var(--line2);flex:none}
+.stage[aria-selected="true"] .num{background:var(--mint);border-color:var(--mint);color:#04140d}
+.stage .you{margin-left:auto;font:600 10.5px var(--mono);color:var(--amber);border:1px solid color-mix(in srgb,var(--amber) 40%,transparent);border-radius:999px;padding:1px 7px}
+.detail{background:var(--panel);border:1px solid var(--line2);border-radius:18px;padding:30px;min-height:330px;position:relative;overflow:hidden}
+.detail::after{content:attr(data-n);position:absolute;right:18px;bottom:-30px;font:700 180px/1 var(--display);color:var(--line);opacity:.55;pointer-events:none;letter-spacing:-.05em}
+.detail .cmd{display:inline-block;font:600 14px var(--mono);color:var(--mint);background:var(--code);border:1px solid var(--line);padding:6px 11px;border-radius:8px;margin-bottom:16px}
+.detail h3{font-size:26px}
+.detail p{color:var(--muted);max-width:60ch;position:relative;z-index:1}
+.detail ul{margin:14px 0 0;padding:0;list-style:none;position:relative;z-index:1}
+.detail li{padding:7px 0 7px 26px;position:relative;color:var(--ink);font-size:15px}
+.detail li::before{content:"";position:absolute;left:4px;top:15px;width:8px;height:8px;border-radius:2px;background:var(--mint);transform:rotate(45deg)}
+.detail .gate{display:inline-flex;gap:8px;align-items:center;margin-top:16px;font:500 13px var(--mono);color:var(--amber);background:color-mix(in srgb,var(--amber) 10%,transparent);border:1px solid color-mix(in srgb,var(--amber) 35%,transparent);padding:6px 10px;border-radius:8px;position:relative;z-index:1}
+.fade{animation:fade .35s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* terminal */
+.term{background:var(--code);border:1px solid var(--line2);border-radius:16px;overflow:hidden;box-shadow:0 30px 80px rgba(0,0,0,.3)}
+.term .bar{display:flex;gap:8px;align-items:center;padding:12px 14px;border-bottom:1px solid #1d2632;color:#6f7d90;font:500 12px var(--mono)}
+.term pre{margin:0;padding:18px 20px 22px;font:13.5px/1.75 var(--mono);color:#c9d4e2;overflow-x:auto;min-height:330px}
+.t-pass{color:#3dffb5;font-weight:600}.t-fail{color:#ff6b4a;font-weight:600}.t-dim{color:#5d6b7e}.t-hi{color:#fff;font-weight:600}.t-amb{color:#ffc35c}
+.cursor{display:inline-block;width:8px;height:16px;background:#3dffb5;vertical-align:-3px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.demo-grid{display:grid;grid-template-columns:.85fr 1.15fr;gap:40px;align-items:center}
+@media (max-width:900px){.demo-grid{grid-template-columns:1fr}}
+.checks{display:grid;gap:10px;margin-top:24px}
+.check{display:flex;gap:12px;align-items:flex-start;color:var(--muted);font-size:15px}
+.check svg{flex:none;margin-top:3px;color:var(--mint)}
+.check b{color:var(--ink);font-weight:600}
+
+/* install */
+.install{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+@media (max-width:900px){.install{grid-template-columns:1fr}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:24px}
+.step-n{font:600 12px var(--mono);color:var(--mint);letter-spacing:.1em}
+.tabs{display:flex;gap:4px;background:var(--panel2);border:1px solid var(--line);padding:4px;border-radius:10px;width:max-content;max-width:100%;margin:14px 0 4px;flex-wrap:wrap}
+.tab{border:0;background:transparent;color:var(--muted);font:500 13.5px var(--sans);padding:6px 12px;border-radius:7px;cursor:pointer}
+.tab[aria-selected="true"]{background:var(--panel);color:var(--ink);box-shadow:0 1px 0 var(--line2),0 0 0 1px var(--line2)}
+pre.code{position:relative;background:var(--code);border:1px solid var(--line);border-radius:11px;padding:14px 16px;margin:12px 0;font:13.5px/1.6 var(--mono);color:#d7e1ee;overflow-x:auto}
+pre.code .p{color:#5d6b7e;user-select:none}
+.copy{position:absolute;top:8px;right:8px;font:500 11.5px var(--sans);border:1px solid #2a3747;background:#141b25;color:#8c99ab;border-radius:6px;padding:3px 9px;cursor:pointer}
+.copy:hover{color:#fff}
+.opts{width:100%;border-collapse:collapse;font-size:14.5px;margin-top:6px}
+.opts td{padding:10px 0;border-bottom:1px dashed var(--line);vertical-align:top}
+.opts tr:last-child td{border-bottom:0}
+.opts td:first-child{color:var(--ink);font-weight:500;padding-right:14px;width:46%}
+.opts td:last-child{color:var(--muted)}
+.chip{font:600 11px var(--mono);border-radius:999px;padding:1px 7px;margin-left:6px;border:1px solid var(--line2);color:var(--muted);white-space:nowrap}
+.chip.on{color:var(--mint);border-color:color-mix(in srgb,var(--mint) 40%,transparent)}
+.note{display:flex;gap:12px;border:1px solid color-mix(in srgb,var(--amber) 35%,transparent);background:color-mix(in srgb,var(--amber) 8%,transparent);border-radius:12px;padding:14px 16px;color:var(--muted);font-size:14.5px;margin-top:16px}
+.note b{color:var(--amber)}
+
+/* gates */
+.gates{display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+@media (max-width:900px){.gates{grid-template-columns:1fr 1fr}}
+@media (max-width:560px){.gates{grid-template-columns:1fr}}
+.gatecard{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:20px;display:flex;flex-direction:column;gap:10px}
+.gatecard .q{font:600 16.5px/1.35 var(--display);color:var(--ink)}
+.gatecard .why{color:var(--muted);font-size:14.5px;flex:1}
+.gatecard .pass{font:500 12.5px var(--mono);color:var(--muted);border-top:1px dashed var(--line);padding-top:10px}
+.gatecard .pass code{color:var(--amber);background:color-mix(in srgb,var(--amber) 10%,transparent);padding:1px 6px;border-radius:5px}
+.gatecard.stop{border-color:color-mix(in srgb,var(--rust) 45%,transparent);background:linear-gradient(180deg,var(--rust-glow),var(--panel) 60%)}
+.gatecard .tag{font:600 10.5px var(--mono);letter-spacing:.1em;text-transform:uppercase;color:var(--dim)}
+.gatecard.stop .tag{color:var(--rust)}
+.typed{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.typed span{font:500 13px var(--mono);border:1px dashed var(--line2);border-radius:8px;padding:6px 10px;color:var(--ink)}
+.typed span::before{content:"› ";color:var(--mint)}
+
+/* limits + faq */
+.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+@media (max-width:760px){.two{grid-template-columns:1fr}}
+details{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:0 18px;transition:border-color .2s}
+details[open]{border-color:var(--line2)}
+summary{cursor:pointer;list-style:none;padding:16px 0;font:600 15.5px var(--sans);display:flex;justify-content:space-between;gap:12px;align-items:center}
+summary::-webkit-details-marker{display:none}
+summary::after{content:"+";font:400 22px/1 var(--mono);color:var(--mint);transition:transform .2s}
+details[open] summary::after{transform:rotate(45deg)}
+details p{color:var(--muted);margin:0 0 16px;font-size:15px}
+.disclaimer{border:1px solid color-mix(in srgb,var(--rust) 40%,transparent);background:linear-gradient(90deg,var(--rust-glow),transparent);border-radius:14px;padding:18px 20px;display:flex;gap:14px;align-items:flex-start;margin-bottom:22px}
+.disclaimer p{margin:0;color:var(--muted)}
+.disclaimer b{color:var(--ink)}
+
+/* final cta */
+.final{text-align:center;padding:100px 0 110px;position:relative;overflow:hidden;border-top:1px solid var(--line)}
+.final::before{content:"";position:absolute;inset:0;background:radial-gradient(600px 300px at 50% 100%,var(--mint-glow),transparent 70%);pointer-events:none}
+.final h2{margin:14px auto;max-width:18ch}
+.final .sub{margin:0 auto 30px}
+.final .cta{justify-content:center}
+footer{border-top:1px solid var(--line);padding:30px 0 50px;color:var(--dim);font-size:14px}
+footer .wrap{display:flex;flex-wrap:wrap;gap:12px 28px;justify-content:space-between}
+footer a{color:var(--muted);text-decoration:none}
+footer a:hover{color:var(--ink)}
+
+.reveal{opacity:0;transform:translateY(18px);transition:opacity .7s ease,transform .7s ease}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation:none!important;transition:none!important}
+  .reveal{opacity:1;transform:none}
+  h1 .strike::after{transform:scaleX(1)}
+  .write .ln{opacity:.95;transform:none}
+}
 </style>
 </head>
 <body>
 <header class="top"><div class="wrap">
-  <a class="brand" href="#"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="9" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="4" width="9" height="16" rx="2" fill="var(--accent)"/></svg>cleanroom</a>
-  <nav class="links"><a href="#how">How it works</a><a href="#install">Install</a><a href="#use">Use it</a><a href="#gates">Your decisions</a><a href="#limits">Limits</a><a href="https://github.com/MndTheNerd/cleanroom">GitHub</a></nav>
-  <button id="theme" type="button" aria-label="Toggle color theme">Theme</button>
+  <a class="brand" href="#top"><span class="logo" aria-hidden="true"></span>cleanroom</a>
+  <nav class="navlinks" aria-label="Sections"><a href="#how">How it works</a><a href="#proof">Proof</a><a href="#install">Install</a><a href="#gates">Your decisions</a><a href="#limits">Limits</a></nav>
+  <div class="actions">
+    <a class="iconbtn" href="https://github.com/MndTheNerd/cleanroom" aria-label="GitHub repository"><svg width="17" height="17" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg></a>
+    <button class="iconbtn" id="theme" type="button" aria-label="Toggle light or dark theme"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="4.5"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></button>
+  </div>
 </div></header>
 
-<main>
-<div class="wrap hero">
-  <div class="eyebrow">Claude Code plugin · open source</div>
-  <h1>Rewrite leftover third-party code. Prove it's gone.</h1>
-  <p class="lede">Your project started from someone else's repository, and their code, names and comments are still in there.
-  <b>cleanroom</b> finds what still matches, has it rebuilt from a description by an AI that is physically walled off from
-  the original, checks the result two independent ways, and asks <i>you</i> every question a tool can't answer.</p>
-  <div class="cta">
-    <a class="btn primary" href="#install">Install in two commands</a>
-    <a class="btn" href="https://github.com/MndTheNerd/cleanroom">View on GitHub</a>
+<main id="top">
+<!-- ======================= HERO ======================= -->
+<div class="hero"><div class="wrap">
+  <div>
+    <span class="pill"><b>Open source</b> Claude Code plugin · runs on your Claude plan</span>
+    <h1>Your code. <span class="strike">Their leftovers.</span><br><span class="glow">Rewritten clean.</span></h1>
+    <p class="lede">Built on someone else's repo and their code is still in yours? <b>cleanroom</b> finds every module that still matches upstream,
+    rebuilds it from a behavior spec inside a <b>sealed container that has never seen the original</b>, proves the new code is different
+    and behaves the same, and asks <b>you</b> every question a tool can't answer.</p>
+    <div class="cta">
+      <a class="btn primary" href="#install">Get started <span aria-hidden="true">→</span></a>
+      <a class="btn" href="#how">See how it works</a>
+    </div>
+    <div class="installline"><span>$</span><code>/plugin marketplace add MndTheNerd/cleanroom</code></div>
   </div>
-  <div class="note" style="margin-top:28px"><strong>Not legal advice.</strong> cleanroom produces evidence that you followed a careful
-  process. It gives no legal immunity, AI-run clean rooms haven't been tested in court, and the model may have seen the original
-  code during training. Read <a href="#limits">what it can't enforce</a> before relying on it.</div>
-</div>
 
+  <div class="wall" aria-label="Animation: an upstream-derived module on the left is scanned and flagged 93% similar; a rewrite on the right, built behind the wall, scores 6%.">
+    <div class="wall-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="file">app/rows.py · verify</span></div>
+    <div class="panes">
+      <div class="pane left">
+        <div class="label"><span>Upstream-derived</span><span class="score" id="scoreL">93%</span></div>
+<div class="ln"><span class="k">def</span> split(line, sep=<span class="s">";"</span>):</div>
+<div class="ln hit">    <span class="c"># walk every char, honour quotes</span></div>
+<div class="ln hit">    out, cur, q = [], [], <span class="k">False</span></div>
+<div class="ln hit">    <span class="k">for</span> c <span class="k">in</span> line:</div>
+<div class="ln hit">        <span class="k">if</span> c == <span class="s">'"'</span>: q = <span class="k">not</span> q</div>
+<div class="ln hit">        <span class="k">elif</span> c == sep <span class="k">and not</span> q:</div>
+<div class="ln">            out.append(<span class="s">""</span>.join(cur))</div>
+<div class="ln hit">    <span class="k">raise</span> ValueError(<span class="s">"Quill.."</span>)</div>
+        <div class="scan" aria-hidden="true"></div>
+      </div>
+      <div class="divider" aria-hidden="true"></div>
+      <div class="pane right write" id="rightPane">
+        <div class="label"><span>Built behind the wall</span><span class="score">6%</span></div>
+<div class="ln" style="animation-delay:.3s"><span class="k">def</span> split(text, sep=<span class="s">";"</span>):</div>
+<div class="ln" style="animation-delay:.55s">    <span class="k">if</span> text.count(<span class="s">'"'</span>) % 2:</div>
+<div class="ln" style="animation-delay:.8s">        <span class="k">raise</span> ValueError(<span class="s">"odd"</span>)</div>
+<div class="ln" style="animation-delay:1.05s">    fs = [<span class="s">""</span>]</div>
+<div class="ln" style="animation-delay:1.3s">    <span class="k">for</span> i, s <span class="k">in</span> enumerate(parts):</div>
+<div class="ln" style="animation-delay:1.55s">        <span class="k">if</span> i % 2: fs[-1] += s</div>
+<div class="ln" style="animation-delay:1.8s">        <span class="k">else</span>: fs += cut(s)</div>
+<div class="ln" style="animation-delay:2.05s">    <span class="k">return</span> [f.strip() <span class="k">for</span> f <span class="k">in</span> fs]</div>
+    </div>
+    <div class="wall-foot">
+      <div><span class="ok">✓</span> tests 11/11</div>
+      <div><span class="ok">✓</span> behavior 14/14</div>
+      <div><span class="ok">✓</span> winnowing 6%</div>
+      <div><span class="ok">✓</span> JPlag 0%</div>
+    </div>
+  </div>
+</div></div>
+
+<!-- ======================= STATS ======================= -->
+<div class="stats"><div class="wrap">
+  <div class="stat reveal"><div class="n"><em>9</em>/9</div><div class="t">container isolation checks pass in CI on every push</div></div>
+  <div class="stat reveal"><div class="n"><em>2</em></div><div class="t">independent similarity engines: winnowing + JPlag</div></div>
+  <div class="stat reveal"><div class="n"><em>6</em></div><div class="t">risk questions only a human can answer</div></div>
+  <div class="stat reveal"><div class="n"><em>0</em></div><div class="t">lines of upstream code ever sent to the builder</div></div>
+</div></div>
+
+<!-- ======================= WHY ======================= -->
 <section id="why"><div class="wrap">
-  <h2>Who it's for</h2>
-  <p class="sub">You built your own architecture on top of an upstream open-source project. Now you want to keep your design and
-  replace only the parts that still match upstream, because of its license, because you're going commercial, or because you want
-  a clean codebase. You've tried asking an AI to "rewrite it", and the same session that read the original kept reproducing it.</p>
-  <div class="grid g3">
-    <div class="card"><h3>Finds every leftover</h3><p>Token-level similarity (k-gram winnowing) plus copied identifiers, strings, comments, file names, package metadata, README text, license headers and config keys.</p></div>
-    <div class="card"><h3>Builder never sees the original</h3><p>The rewrite happens in a Docker container that can see only an approved spec folder and can reach only the model API.</p></div>
-    <div class="card"><h3>You decide the hard parts</h3><p>License, agreements, patents, distribution, naming and AI-training risk are plain-language questions. Nothing proceeds until you answer.</p></div>
-    <div class="card"><h3>Two independent checks</h3><p>Every rewritten module must pass the built-in winnowing scan <i>and</i> JPlag, plus its tests and a behavior comparison with the old code.</p></div>
-    <div class="card"><h3>Tamper-evident audit trail</h3><p>Every stage, file hash, command and decision goes into a hash-chained log, committed to git at each step.</p></div>
-    <div class="card"><h3>Runs on your Claude plan</h3><p>Works with a Pro, Max, Team or Enterprise subscription. No API key required (an API key works too).</p></div>
+  <div class="kicker reveal">Why it exists</div>
+  <h2 class="reveal">Asking an AI to "just rewrite it" doesn't work.</h2>
+  <p class="sub reveal">The session that read the original keeps reproducing it, and you end up hunting leftovers by hand. cleanroom puts an actual wall between reading and writing, then checks the result like an auditor would.</p>
+  <div class="features">
+    <div class="feat reveal"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></div><h3>Finds every leftover</h3><p>Token-level winnowing plus copied identifiers, strings, comments, file names, package metadata, README prose, license headers and config keys.</p></div>
+    <div class="feat reveal"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div><h3>Physically sealed builder</h3><p>A Docker container that mounts only the approved spec folder and can reach only the model API. No repo, no web, no memory.</p></div>
+    <div class="feat reveal"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v18M5 8l7-5 7 5"/><path d="M5 8v8l7 5 7-5V8"/></svg></div><h3>Two independent checks</h3><p>New code must pass its tests, match the old behavior, and stay under the threshold on both winnowing and JPlag.</p></div>
+    <div class="feat reveal"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></div><h3>No leaks back</h3><p>When a rewrite is too close, the builder hears only "file X, score N". Never the matching lines. Never a diff.</p></div>
+    <div class="feat reveal"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 7h8M8 12h8M8 17h5"/><rect x="3" y="3" width="18" height="18" rx="3"/></svg></div><h3>Tamper-evident trail</h3><p>Every stage, file hash, command and decision goes into a hash-chained log, committed to git at every step.</p></div>
+    <div class="feat reveal"><div class="ic"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg></div><h3>You stay in charge</h3><p>License, contracts, patents, distribution, naming, AI-training risk. Plain-language questions, your exact words recorded, no defaults.</p></div>
   </div>
 </div></section>
 
-<section id="how"><div class="wrap">
-  <h2>How it works</h2>
-  <p class="sub">A classic clean room has two teams with a wall between them: one reads the original and writes a description, the
-  other builds from the description alone. cleanroom does the same with AI agents, and makes the wall physical.</p>
-  <div class="diagram" role="img" aria-label="Diagram: the dirty room reads upstream and writes specs, the spec filter and your approval form the wall, the clean room container builds from specs only, then verification and swap.">
-  <svg viewBox="0 0 980 300" xmlns="http://www.w3.org/2000/svg">
-    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
-    <rect x="10" y="20" width="280" height="200" rx="12" fill="var(--dirty-soft)" stroke="var(--dirty)"/>
-    <text x="30" y="50" class="dt" fill="var(--dirty)" style="fill:var(--dirty)">Dirty room · your session</text>
-    <text x="30" y="80" class="ds">Analyzer agent reads the upstream</text>
-    <text x="30" y="100" class="ds">and your tainted module</text>
-    <text x="30" y="130" class="ds">Writes a behavior spec:</text>
-    <text x="30" y="150" class="ds">inputs, outputs, errors, limits</text>
-    <text x="30" y="180" class="ds">No code. No upstream names.</text>
-    <text x="30" y="200" class="ds">No copied comments or messages.</text>
-    <rect x="345" y="20" width="110" height="200" rx="12" fill="var(--warn-soft)" stroke="var(--warn)"/>
-    <text x="400" y="50" class="dt" text-anchor="middle" style="fill:var(--warn)">The wall</text>
-    <text x="400" y="85" class="ds" text-anchor="middle">spec filter</text>
-    <text x="400" y="115" class="ds" text-anchor="middle">+ you approve</text>
-    <text x="400" y="145" class="ds" text-anchor="middle">SHA-256</text>
-    <text x="400" y="165" class="ds" text-anchor="middle">manifest</text>
-    <rect x="510" y="20" width="280" height="200" rx="12" fill="var(--clean-soft)" stroke="var(--clean)"/>
-    <text x="530" y="50" class="dt" style="fill:var(--clean)">Clean room · Docker container</text>
-    <text x="530" y="80" class="ds">Sees only: spec, interface contract,</text>
-    <text x="530" y="100" class="ds">style notes, spec-derived tests</text>
-    <text x="530" y="130" class="ds">Network: model API only (proxy)</text>
-    <text x="530" y="150" class="ds">Own credential, different model</text>
-    <text x="530" y="180" class="ds">No memory, no CLAUDE.md,</text>
-    <text x="530" y="200" class="ds">no MCP, no web tools</text>
-    <rect x="845" y="20" width="125" height="200" rx="12" fill="var(--surface)" stroke="var(--line)"/>
-    <text x="907" y="50" class="dt" text-anchor="middle">Verify</text>
-    <text x="907" y="85" class="ds" text-anchor="middle">tests</text>
-    <text x="907" y="110" class="ds" text-anchor="middle">behavior match</text>
-    <text x="907" y="135" class="ds" text-anchor="middle">winnowing</text>
-    <text x="907" y="160" class="ds" text-anchor="middle">JPlag</text>
-    <text x="907" y="195" class="ds" text-anchor="middle">→ swap</text>
-    <line x1="292" y1="120" x2="341" y2="120" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
-    <line x1="457" y1="120" x2="506" y2="120" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
-    <line x1="792" y1="120" x2="841" y2="120" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
-    <path d="M907 222 C907 285, 400 285, 400 224" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#ar)"/>
-    <text x="650" y="292" class="ds" text-anchor="middle">if too similar: builder hears only "file X, score N"; spec revised, you re-approve (max 3 tries)</text>
-  </svg></div>
+<!-- ======================= HOW ======================= -->
+<section id="how" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
+  <div class="kicker reveal">How it works</div>
+  <h2 class="reveal">Eight stages. Every one stops if something's wrong.</h2>
+  <p class="sub reveal">Run them one at a time, or <code>/cleanroom:run-all</code> to go end to end. It halts at every question for you and every failed check. Click a stage.</p>
+  <div class="pipe reveal">
+    <div class="stages" role="tablist" aria-label="Pipeline stages" id="stages"></div>
+    <div class="detail" id="detail" role="tabpanel" aria-live="polite"></div>
+  </div>
 </div></section>
 
-<section id="install"><div class="wrap">
-  <h2>Install</h2>
-  <p class="sub">You need <a href="https://code.claude.com/docs/en/setup">Claude Code</a>, Python 3.10+, and Docker (Docker Desktop on
-  Windows and macOS, which needs admin rights and on Windows WSL2; or Docker Engine on Linux).</p>
-  <h3>1. Add the plugin</h3>
-  <pre><code>/plugin marketplace add MndTheNerd/cleanroom
-/plugin install cleanroom@cleanroom</code></pre>
-  <h3>2. Pick your options</h3>
-  <p>When you enable the plugin, Claude Code asks you a few questions. Add-ons you select install in the background.</p>
-  <div class="tablewrap"><table>
-    <tr><th>Option</th><th>Default</th><th>What it's for</th></tr>
-    <tr><td>JPlag similarity checker</td><td>on</td><td>Second, independent similarity check (downloads JPlag + a Java 25 runtime, ~150 MB).</td></tr>
-    <tr><td>ScanCode Toolkit</td><td>on</td><td>Final license scan after the swap (~130 MB).</td></tr>
-    <tr><td>ScanCode offline source</td><td>empty</td><td>A ScanCode .zip or .whl you already have, for slow connections.</td></tr>
-    <tr><td>Builder credential</td><td>subscription</td><td>Use your Claude plan, or an API key.</td></tr>
-    <tr><td>Analyzer / builder model</td><td>opus / sonnet</td><td>They must differ.</td></tr>
-  </table></div>
-  <p class="sub" style="margin-top:8px">Turned an add-on off? The step that needs it stops instead of being skipped. Install it later with <code>/cleanroom:addons</code>.</p>
-  <h3 id="subscription">3. Give the builder its own credential</h3>
-  <p>The builder runs in the container with its own credential, never your main login. With a Claude subscription, in <b>your own terminal</b>:</p>
-  <pre><code>claude setup-token</code></pre>
-  <p>Approve in the browser, then set the printed token before starting Claude Code. Never paste it into the chat.</p>
-  <pre><code># macOS / Linux
-export CLEANROOM_BUILDER_OAUTH_TOKEN=paste-token-here
-
-# Windows PowerShell
-$env:CLEANROOM_BUILDER_OAUTH_TOKEN = "paste-token-here"</code></pre>
-  <p class="sub">Builder runs count against your plan's usage limits. Prefer an API key? Set <code>CLEANROOM_BUILDER_API_KEY</code> and pick <code>api_key</code> in the options.</p>
+<!-- ======================= PROOF ======================= -->
+<section id="proof"><div class="wrap demo-grid">
+  <div>
+    <div class="kicker reveal">Proof, not promises</div>
+    <h2 class="reveal">Copying gets caught. Rewriting passes.</h2>
+    <p class="sub reveal" style="margin-bottom:0">From the included demo on fake repos. The first rewrite cheats by copying the original's structure; both similarity engines reject it. The builder is told only the score, the spec is revised, and attempt two passes.</p>
+    <div class="checks reveal">
+      <div class="check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg><span><b>Isolation verified in CI:</b> GitHub blocked (proxy log: <code>TCP_DENIED</code>), model API tunnelled, no upstream bytes in the container.</span></div>
+      <div class="check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg><span><b>Leftover sweep</b> caught copied README prose and config keys that a simple rename would have missed.</span></div>
+      <div class="check"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M20 6 9 17l-5-5"/></svg><span><b>ScanCode</b> confirms no upstream license headers, notices or vendored files remain.</span></div>
+    </div>
+  </div>
+  <div class="term reveal">
+    <div class="bar"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span style="margin-left:8px">/cleanroom:verify app-rows</span></div>
+    <pre id="term" aria-label="Terminal output of two verify attempts"></pre>
+  </div>
 </div></section>
 
-<section id="use"><div class="wrap">
-  <h2>Use it, step by step</h2>
-  <p class="sub">Open Claude Code in your project (the "harness") and run <code>/cleanroom:run-all</code>, or go stage by stage.
-  Steps marked <span class="tag you">you</span> wait for your answer.</p>
-  <ol class="steps">
-    <li><h3><code>/cleanroom:init</code> <span class="tag you">you</span></h3>
-      <p>Asks, one question at a time, for the upstream repo path, languages and test command. Works on a new <code>cleanroom/&lt;date&gt;</code> git branch.</p>
-      <p>Detects the upstream license and explains it in plain language. Permissive (MIT/Apache/BSD): you're told attribution may be enough, and asked whether to continue anyway.</p></li>
-    <li><h3><code>/cleanroom:risks</code> <span class="tag you">you</span></h3>
-      <p>Six plain-language questions about access, agreements, patents, distribution, the new name, and AI training risk. <a href="#gates">See them below.</a></p></li>
-    <li><h3><code>/cleanroom:scan</code></h3>
-      <p>Compares your project with upstream and labels each module <b>original</b>, <b>mixed</b>, <b>tainted</b> or <b>vendored</b>. Add <code>--dry-run</code> to change nothing.</p></li>
-    <li><h3><code>/cleanroom:spec</code> <span class="tag you">you</span></h3>
-      <p>You approve the list of names kept for compatibility (public API, file formats). The analyzer writes a behavior spec per tainted module, the filter rejects leaks, then you read it and type <code>approve spec</code>.</p></li>
-    <li><h3><code>/cleanroom:build</code></h3>
-      <p>Runs an isolation probe, then the test-writer and builder in the container, with SHA-256 manifest checks before and after.</p></li>
-    <li><h3><code>/cleanroom:verify</code></h3>
-      <p>Tests, behavior comparison with the old module, winnowing and JPlag all have to pass. On failure the spec is revised and you re-approve it (3 tries max).</p></li>
-    <li><h3><code>/cleanroom:swap</code> <span class="tag you">you</span></h3>
-      <p>Shows a one-screen summary. After you type <code>approve swap</code>: backup, swap, delete tainted and vendored files, remove upstream remotes, headers and name, grep for leftovers, run ScanCode.</p></li>
-    <li><h3><code>/cleanroom:report</code></h3>
-      <p>Writes <code>CLEANROOM_REPORT.md</code>: license decision, before/after scores from both tools, what was replaced, test results, ScanCode results, every decision you made, and the risks that remain.</p></li>
-  </ol>
-  <h3>What a run looks like</h3>
-  <p class="sub">From the included demo on fake repositories. A lazy rewrite that copies the original is rejected; an independent one passes:</p>
-  <pre><code>tests        PASS  11 passed
-equivalence  PASS  14/14 cases
-winnowing    FAIL  app/rows.py: 93% (limit 15%), strings 2, comments 3, name 4
-jplag        FAIL  max 100% (limit 30%)
-VERIFY FAILED (attempt 1 of 3)
-...
-winnowing    PASS  app/rows.py: 6% (limit 15%)
-jplag        PASS  max 0% (limit 30%)
-VERIFY PASSED</code></pre>
+<!-- ======================= INSTALL ======================= -->
+<section id="install" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
+  <div class="kicker reveal">Install</div>
+  <h2 class="reveal">Two commands. No API key required.</h2>
+  <p class="sub reveal">You need <a href="https://code.claude.com/docs/en/setup">Claude Code</a>, Python 3.10+ and Docker (Docker Desktop on Windows/macOS, Docker Engine on Linux).</p>
+  <div class="install">
+    <div class="card reveal">
+      <div class="step-n">STEP 1 · ADD THE PLUGIN</div>
+      <pre class="code"><code><span class="p">› </span>/plugin marketplace add MndTheNerd/cleanroom
+<span class="p">› </span>/plugin install cleanroom@cleanroom</code></pre>
+      <div class="step-n" style="margin-top:22px">STEP 2 · PICK YOUR OPTIONS</div>
+      <table class="opts">
+        <tr><td>JPlag similarity checker <span class="chip on">on</span></td><td>Second engine. ~150 MB incl. Java runtime.</td></tr>
+        <tr><td>ScanCode license scanner <span class="chip on">on</span></td><td>Final license sweep. ~130 MB.</td></tr>
+        <tr><td>ScanCode offline source <span class="chip">optional</span></td><td>A .zip/.whl you already have.</td></tr>
+        <tr><td>Builder credential <span class="chip on">subscription</span></td><td>Or <code>api_key</code>.</td></tr>
+        <tr><td>Analyzer / builder model <span class="chip">opus / sonnet</span></td><td>Must differ.</td></tr>
+      </table>
+      <p style="color:var(--muted);font-size:14px;margin:12px 0 0">Add-ons install in the background. Switched one off? The step that needs it stops rather than skipping. Add it later with <code>/cleanroom:addons</code>.</p>
+    </div>
+    <div class="card reveal">
+      <div class="step-n">STEP 3 · GIVE THE BUILDER ITS OWN CREDENTIAL</div>
+      <div class="tabs" role="tablist" aria-label="Credential type" data-group="cred">
+        <button class="tab" role="tab" aria-selected="true" data-tab="sub">Claude subscription</button>
+        <button class="tab" role="tab" aria-selected="false" data-tab="key">API key</button>
+      </div>
+      <div data-panel="cred:sub">
+        <p style="color:var(--muted);font-size:14.5px;margin:12px 0 0">Pro, Max, Team or Enterprise. In <b style="color:var(--ink)">your own terminal</b> (never in the chat):</p>
+        <pre class="code"><code><span class="p">$ </span>claude setup-token</code></pre>
+        <div class="tabs" role="tablist" aria-label="Shell" data-group="os1">
+          <button class="tab" role="tab" aria-selected="true" data-tab="nix">macOS / Linux</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="win">Windows</button>
+        </div>
+        <pre class="code" data-panel="os1:nix"><code>export CLEANROOM_BUILDER_OAUTH_TOKEN=paste-token-here</code></pre>
+        <pre class="code" data-panel="os1:win" hidden><code>$env:CLEANROOM_BUILDER_OAUTH_TOKEN = "paste-token-here"</code></pre>
+        <p style="color:var(--muted);font-size:14px;margin:0">Builder runs count against your plan's usage limits. The token lasts a year and can only make model requests.</p>
+      </div>
+      <div data-panel="cred:key" hidden>
+        <p style="color:var(--muted);font-size:14.5px;margin:12px 0 0">Use a key that's <b style="color:var(--ink)">different</b> from your own <code>ANTHROPIC_API_KEY</code>, and choose <code>api_key</code> in the options.</p>
+        <div class="tabs" role="tablist" aria-label="Shell" data-group="os2">
+          <button class="tab" role="tab" aria-selected="true" data-tab="nix">macOS / Linux</button>
+          <button class="tab" role="tab" aria-selected="false" data-tab="win">Windows</button>
+        </div>
+        <pre class="code" data-panel="os2:nix"><code>export CLEANROOM_BUILDER_API_KEY=sk-ant-...</code></pre>
+        <pre class="code" data-panel="os2:win" hidden><code>$env:CLEANROOM_BUILDER_API_KEY = "sk-ant-..."</code></pre>
+      </div>
+      <div class="step-n" style="margin-top:22px">STEP 4 · RUN IT IN YOUR PROJECT</div>
+      <pre class="code"><code><span class="p">› </span>/cleanroom:init
+<span class="p">› </span>/cleanroom:run-all</code></pre>
+      <p style="color:var(--muted);font-size:14px;margin:0">Just exploring? <code>python examples/run_demo.py --dest ./demo</code> runs the whole pipeline on fake repos.</p>
+    </div>
+  </div>
 </div></section>
 
+<!-- ======================= GATES ======================= -->
 <section id="gates"><div class="wrap">
-  <h2>The decisions only you can make</h2>
-  <p class="sub">No defaults. A skipped question keeps the gate closed. Your exact words are recorded with a timestamp. Changing an
-  answer later re-opens the related gates. You can also answer in your own terminal with <code>risk_gate.py ask</code>.</p>
-  <div class="tablewrap"><table>
-    <tr><th>Question</th><th>Why it matters</th><th>To continue</th></tr>
-    <tr><td>Did you get the upstream source legitimately?</td><td>Rewriting can't fix code you weren't allowed to read.</td><td>"yes". No or unsure is a <b>hard stop</b>.</td></tr>
-    <tr><td>Did you agree to other terms (EULA, NDA, employment/client contract)?</td><td>Contracts can forbid this work regardless of copyright.</td><td>"no", or type <code>I accept this risk</code>.</td></tr>
-    <tr><td>Do you know of patents on it?</td><td>Patents cover ideas, not text; a rewrite can still infringe. Upstream is scanned for patent notices.</td><td>"no" with nothing found, or type <code>I accept this risk</code>.</td></tr>
-    <tr><td>Will it be sold, distributed or offered as a service?</td><td>Distribution raises the stakes of everything else.</td><td>Any answer; "yes" adds a pre-release checklist.</td></tr>
-    <tr><td>What's the new project name?</td><td>Trademarks aren't touched by rewriting code.</td><td>A name not close to the upstream's.</td></tr>
-    <tr><td>Do you understand AI training risk?</td><td>The model may have seen the original; similarity scans reduce, not remove, that risk.</td><td>Type <code>I understand</code>.</td></tr>
-  </table></div>
-  <p class="sub" style="margin-top:12px">Later gates: <code>approve allowlist</code>, <code>approve spec</code> (per module, and again after any edit), <code>approve swap</code>, and optionally <code>rewrite history</code>.</p>
+  <div class="kicker reveal">Your decisions</div>
+  <h2 class="reveal">Six questions no tool should answer for you.</h2>
+  <p class="sub reveal">Asked one at a time, in plain language. No defaults: skip one and the gate stays shut. Your exact reply is stored with a timestamp, and changing an answer later re-opens the related gates. You can also answer in your own terminal with <code>risk_gate.py ask</code>.</p>
+  <div class="gates">
+    <div class="gatecard stop reveal"><span class="tag">Gate 1 · hard stop</span><div class="q">Did you get the upstream source legitimately?</div><div class="why">Rewriting can't fix code you weren't allowed to read.</div><div class="pass">"no" or "unsure" ends the process</div></div>
+    <div class="gatecard reveal"><span class="tag">Gate 2</span><div class="q">Did you agree to other terms (EULA, NDA, employment or client contract)?</div><div class="why">A contract can forbid this work whatever copyright says.</div><div class="pass">"no", or type <code>I accept this risk</code></div></div>
+    <div class="gatecard reveal"><span class="tag">Gate 3</span><div class="q">Do you know of patents on it?</div><div class="why">Patents cover ideas, not text. The upstream is also scanned for patent notices.</div><div class="pass">"no" + nothing found, or <code>I accept this risk</code></div></div>
+    <div class="gatecard reveal"><span class="tag">Gate 4</span><div class="q">Will it be sold, distributed or offered as a service?</div><div class="why">Distribution raises the stakes of everything else. "Yes" adds a pre-release checklist.</div><div class="pass">any answer, recorded</div></div>
+    <div class="gatecard reveal"><span class="tag">Gate 5</span><div class="q">What's the new project name?</div><div class="why">Trademarks aren't touched by rewriting code. Look-alike names are refused.</div><div class="pass">a name not close to upstream's</div></div>
+    <div class="gatecard reveal"><span class="tag">Gate 6</span><div class="q">Do you understand AI training risk?</div><div class="why">The model may have seen the original. Similarity checks reduce that risk; they don't remove it.</div><div class="pass">type <code>I understand</code></div></div>
+  </div>
+  <div class="typed reveal"><span>approve allowlist</span><span>approve spec</span><span>approve swap</span><span>rewrite history (optional)</span></div>
 </div></section>
 
-<section id="limits"><div class="wrap">
-  <h2>What it can't enforce</h2>
-  <p class="sub">Be clear-eyed about these. The full list with what to do about each is in <a href="https://github.com/MndTheNerd/cleanroom/blob/main/LIMITATIONS.md">LIMITATIONS.md</a>.</p>
-  <details><summary>The model may remember the original from training</summary><p>Isolation stops it reading the upstream now, not recalling it. The two similarity checks are the mitigation.</p></details>
-  <details><summary>Legal status is untested</summary><p>AI-run clean rooms haven't been tested in court. The report is evidence of process. Get legal review before distributing.</p></details>
-  <details><summary>Close paraphrases in specs</summary><p>The filter catches code, upstream identifiers, long quotes and 8-word copied runs, but not a careful paraphrase of an algorithm. That's why you review every spec.</p></details>
-  <details><summary>Your Docker setup</summary><p>The container design can't be verified until it runs on your machine. Run the isolation probe before your first build, and after Docker updates.</p></details>
-  <details><summary>Git history still holds the original</summary><p>Swapping edits the working tree. An optional, separately confirmed step starts a fresh history; forks and clones keep the old one.</p></details>
-  <details><summary>Trademarks, patents, trade secrets, contracts</summary><p>Clean-room rewriting addresses copyright only. Your answers to the risk questions are recorded and linked in the report.</p></details>
+<!-- ======================= LIMITS ======================= -->
+<section id="limits" style="background:var(--bg2);border-top:1px solid var(--line);border-bottom:1px solid var(--line)"><div class="wrap">
+  <div class="kicker reveal">Honest limits</div>
+  <h2 class="reveal">What it can't enforce.</h2>
+  <div class="disclaimer reveal"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="var(--rust)" stroke-width="2" style="flex:none;margin-top:2px"><path d="M12 9v4M12 17h.01"/><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/></svg>
+    <p><b>Not legal advice, and no legal immunity.</b> cleanroom produces evidence that you followed a careful process. AI-run clean rooms haven't been tested in court. Full list with mitigations: <a href="https://github.com/MndTheNerd/cleanroom/blob/main/LIMITATIONS.md">LIMITATIONS.md</a>.</p></div>
+  <div class="two">
+    <details class="reveal"><summary>The model may remember the original</summary><p>Isolation stops it reading the upstream now, not recalling it from training. The two similarity checks are the mitigation.</p></details>
+    <details class="reveal"><summary>Close paraphrases in specs</summary><p>The filter catches code, upstream identifiers, long quotes and 8-word copied runs, but not a careful paraphrase of an algorithm. That's why you review every spec.</p></details>
+    <details class="reveal"><summary>Your Docker setup</summary><p>CI proves the design on Linux every push. Run the isolation probe on your own machine before the first build, and after Docker updates.</p></details>
+    <details class="reveal"><summary>Git history still holds the original</summary><p>Swapping edits the working tree. An optional, separately confirmed step starts fresh history; forks and clones keep the old one.</p></details>
+    <details class="reveal"><summary>Trademarks, patents, trade secrets, contracts</summary><p>Clean-room rewriting addresses copyright only. Your answers to the six questions are recorded and linked to each residual risk in the report.</p></details>
+    <details class="reveal"><summary>Behavior is compared on chosen inputs</summary><p>Equivalence covers the probe inputs derived from the spec. Add more cases as data before verifying if a module has tricky edges.</p></details>
+  </div>
 </div></section>
 
+<!-- ======================= FAQ ======================= -->
 <section id="faq"><div class="wrap">
-  <h2>FAQ</h2>
-  <details><summary>Do I need an API key?</summary><p>No. With a Claude Pro, Max, Team or Enterprise plan, run <code>claude setup-token</code> once and set <code>CLEANROOM_BUILDER_OAUTH_TOKEN</code>. An API key works too.</p></details>
-  <details><summary>Which languages work?</summary><p>Scanning works on most languages (Python, JavaScript/TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Swift, Kotlin, Scala, shell). Behavior comparison is built in for Python; other languages need a small driver command.</p></details>
-  <details><summary>Can I try it without touching a real project?</summary><p>Yes: <code>python examples/run_demo.py --dest ./demo</code> builds a fake project pair and runs the whole pipeline.</p></details>
-  <details><summary>The upstream is MIT licensed. Do I need this?</summary><p>Maybe not. Permissive licenses usually only require keeping the copyright notice. The license gate tells you this and asks whether to continue anyway.</p></details>
+  <div class="kicker reveal">FAQ</div>
+  <h2 class="reveal">Questions people ask.</h2>
+  <div class="two">
+    <details class="reveal"><summary>Do I need an API key?</summary><p>No. With a Claude Pro, Max, Team or Enterprise plan, run <code>claude setup-token</code> once and set <code>CLEANROOM_BUILDER_OAUTH_TOKEN</code>. An API key works too.</p></details>
+    <details class="reveal"><summary>Which languages work?</summary><p>Scanning covers Python, JavaScript/TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Swift, Kotlin, Scala and shell. Behavior comparison is built in for Python; other languages need a small driver command.</p></details>
+    <details class="reveal"><summary>The upstream is MIT. Do I need this?</summary><p>Maybe not. Permissive licenses usually just require keeping the copyright notice. The license gate tells you that and asks whether to continue anyway.</p></details>
+    <details class="reveal"><summary>What do I get at the end?</summary><p><code>CLEANROOM_REPORT.md</code>: license decision, before/after scores from both engines, what was replaced, test and ScanCode results, every decision you made verbatim, and the risks that remain.</p></details>
+    <details class="reveal"><summary>Can I try it safely first?</summary><p>Yes. <code>python examples/run_demo.py --dest ./demo</code> builds a fake project pair and runs the whole pipeline without touching your code.</p></details>
+    <details class="reveal"><summary>How do I contribute or report a hole?</summary><p>Open an issue on GitHub. Reports of any path that lets upstream content reach the builder, or a gate be bypassed, are the most valuable.</p></details>
+  </div>
 </div></section>
+
+<div class="final"><div class="wrap">
+  <div class="kicker reveal" style="justify-content:center">Ready?</div>
+  <h2 class="reveal">Keep your architecture. Lose their code.</h2>
+  <p class="sub reveal">Free and open source under the MIT license.</p>
+  <div class="cta reveal">
+    <a class="btn primary" href="#install">Install cleanroom <span aria-hidden="true">→</span></a>
+    <a class="btn" href="https://github.com/MndTheNerd/cleanroom">Star on GitHub</a>
+  </div>
+</div></div>
 </main>
 
 <footer><div class="wrap">
-  cleanroom is open source (<a href="https://github.com/MndTheNerd/cleanroom/blob/main/LICENSE">LICENSE</a>) ·
-  <a href="https://github.com/MndTheNerd/cleanroom">Source on GitHub</a> ·
-  <a href="https://github.com/MndTheNerd/cleanroom/issues">Report an issue</a><br>
-  Not affiliated with Anthropic. Not legal advice.
+  <span>cleanroom · MIT · not affiliated with Anthropic · not legal advice</span>
+  <span><a href="https://github.com/MndTheNerd/cleanroom">GitHub</a> · <a href="https://github.com/MndTheNerd/cleanroom/blob/main/README.md">README</a> · <a href="https://github.com/MndTheNerd/cleanroom/blob/main/LIMITATIONS.md">Limitations</a> · <a href="https://github.com/MndTheNerd/cleanroom/issues">Issues</a></span>
 </div></footer>
 
 <script>
 (function(){
-  var root=document.documentElement,btn=document.getElementById('theme'),key='cleanroom-theme';
-  try{var s=localStorage.getItem(key);if(s)root.setAttribute('data-theme',s);}catch(e){}
-  btn.addEventListener('click',function(){
-    var cur=root.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  var root=document.documentElement, KEY='cleanroom-theme';
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  try{var s=localStorage.getItem(KEY);if(s)root.setAttribute('data-theme',s);}catch(e){}
+  document.getElementById('theme').addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: light)').matches?'light':'dark');
     var next=cur==='dark'?'light':'dark';root.setAttribute('data-theme',next);
-    try{localStorage.setItem(key,next);}catch(e){}
+    try{localStorage.setItem(KEY,next);}catch(e){}
   });
-  document.querySelectorAll('pre').forEach(function(pre){
+
+  /* pipeline */
+  var S=[
+    {t:'Init + license gate',c:'/cleanroom:init',you:1,p:'Collects your paths, languages and test command one question at a time, then moves your work onto a fresh cleanroom/<date> branch.',l:['Detects the upstream license from LICENSE files, SPDX headers and package metadata','Explains it in plain language: permissive licenses may only need attribution','Asks you to confirm before anything else happens'],g:'You confirm the license and choose continue or stop'},
+    {t:'Risk questions',c:'/cleanroom:risks',you:1,p:'Six plain-language questions about access, agreements, patents, distribution, the new name and AI-training risk.',l:['One at a time, each with why it matters','Your exact reply and a timestamp are recorded','Changing an answer re-opens the related gates'],g:'The build stage stays locked until all six are answered'},
+    {t:'Scan + partition',c:'/cleanroom:scan',p:'Compares your project against upstream and labels every module original, mixed, tainted or vendored.',l:['k-gram winnowing on normalized tokens (renamed copies still match)','Identifiers, strings, comments, file names, metadata, README, headers, config keys','Ranked JSON report plus a short summary; --dry-run changes nothing']},
+    {t:'Behavior specs',c:'/cleanroom:spec',you:1,p:'The analyzer writes one spec per tainted module: inputs, outputs, formats, errors, side effects, invariants, limits. Never code.',l:['spec_filter rejects code, upstream identifiers, long quotes and copied sentences','You approve names kept for compatibility (public API, file formats)','Any edit after approval invalidates it'],g:'You read each spec and type "approve spec"'},
+    {t:'Sealed build',c:'/cleanroom:build',p:'The test-writer and builder run in a Docker container that mounts only the approved spec folder.',l:['Network: model API only, through an allowlist proxy','Own credential, different model, no memory, no CLAUDE.md, no MCP','SHA-256 manifest checked before and after; any stray file aborts']},
+    {t:'Verify',c:'/cleanroom:verify',p:'The new module must pass every check, or it goes back for another attempt (three at most).',l:['Spec-derived tests and behavior comparison with the old module','Built-in winnowing and JPlag, both under threshold','On failure the builder sees file-level scores only, never lines']},
+    {t:'Sign-off + swap',c:'/cleanroom:swap',you:1,p:'A one-screen summary of scores, flagged modules and your decisions. Then the sweep.',l:['Backup, swap, delete tainted and vendored files','Remove upstream remotes, license headers and the project name','Leftover grep plus ScanCode; anything left stops the pipeline'],g:'You type "approve swap"'},
+    {t:'Report',c:'/cleanroom:report',p:'CLEANROOM_REPORT.md documents the whole run for your records.',l:['License decision and before/after scores from both engines','Tests, ScanCode results and every decision you made, verbatim','Residual risks, each linked to the decision you made about it']}
+  ];
+  var stages=document.getElementById('stages'),detail=document.getElementById('detail');
+  function esc(x){return x.replace(/[&<>]/g,function(m){return{'&':'&amp;','<':'&lt;','>':'&gt;'}[m];});}
+  function show(i){
+    var s=S[i];
+    [].forEach.call(stages.children,function(b,j){b.setAttribute('aria-selected',j===i?'true':'false');b.tabIndex=j===i?0:-1;});
+    detail.setAttribute('data-n',String(i+1).padStart(2,'0'));
+    detail.innerHTML='<div class="fade"><span class="cmd">'+s.c+'</span><h3>'+esc(s.t)+'</h3><p>'+esc(s.p)+'</p><ul>'+s.l.map(function(x){return'<li>'+esc(x)+'</li>';}).join('')+'</ul>'+(s.g?'<div class="gate">⏸ '+esc(s.g)+'</div>':'')+'</div>';
+  }
+  S.forEach(function(s,i){
+    var b=document.createElement('button');b.className='stage';b.type='button';b.setAttribute('role','tab');
+    b.innerHTML='<span class="num">'+(i+1)+'</span><span>'+esc(s.t)+'</span>'+(s.you?'<span class="you">you</span>':'');
+    b.addEventListener('click',function(){show(i);});
+    b.addEventListener('keydown',function(e){var k=e.key==='ArrowDown'||e.key==='ArrowRight'?1:e.key==='ArrowUp'||e.key==='ArrowLeft'?-1:0;if(k){e.preventDefault();var n=(i+k+S.length)%S.length;show(n);stages.children[n].focus();}});
+    stages.appendChild(b);
+  });
+  show(0);
+
+  /* tabs */
+  document.querySelectorAll('.tabs').forEach(function(tl){
+    var g=tl.getAttribute('data-group');
+    tl.querySelectorAll('.tab').forEach(function(t){
+      t.addEventListener('click',function(){
+        tl.querySelectorAll('.tab').forEach(function(x){x.setAttribute('aria-selected',x===t?'true':'false');});
+        document.querySelectorAll('[data-panel^="'+g+':"]').forEach(function(p){p.hidden=p.getAttribute('data-panel')!==g+':'+t.getAttribute('data-tab');});
+      });
+    });
+  });
+
+  /* copy buttons */
+  document.querySelectorAll('pre.code').forEach(function(pre){
     var b=document.createElement('button');b.className='copy';b.type='button';b.textContent='Copy';
     b.addEventListener('click',function(){
-      var t=pre.querySelector('code').innerText;
-      (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy';},1500);},function(){});
+      var t=pre.querySelector('code').innerText.replace(/^[›$] /gm,'');
+      if(navigator.clipboard)navigator.clipboard.writeText(t).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy';},1400);});
     });
     pre.appendChild(b);
   });
+
+  /* card spotlight */
+  document.querySelectorAll('.feat').forEach(function(el){
+    el.addEventListener('pointermove',function(e){var r=el.getBoundingClientRect();el.style.setProperty('--mx',(e.clientX-r.left)+'px');el.style.setProperty('--my',(e.clientY-r.top)+'px');});
+  });
+
+  /* terminal replay */
+  var LINES=[
+    ['<span class="t-dim"># attempt 1: rewrite that copied the original</span>',300],
+    ['tests        <span class="t-pass">PASS</span>  11 passed',350],
+    ['equivalence  <span class="t-pass">PASS</span>  14/14 cases',350],
+    ['winnowing    <span class="t-fail">FAIL</span>  app/rows.py: <span class="t-hi">93%</span> (limit 15%)',500],
+    ['jplag        <span class="t-fail">FAIL</span>  max <span class="t-hi">100%</span> (limit 30%)',500],
+    ['<span class="t-fail">VERIFY FAILED</span> (attempt 1 of 3)',700],
+    ['',150],
+    ['<span class="t-amb">→ builder told:</span> "app/rows.py too similar, score 0.93"',500],
+    ['<span class="t-amb">→ spec revised, you approve it again</span>',700],
+    ['',150],
+    ['<span class="t-dim"># attempt 2: built from the spec alone</span>',300],
+    ['tests        <span class="t-pass">PASS</span>  11 passed',350],
+    ['equivalence  <span class="t-pass">PASS</span>  14/14 cases',350],
+    ['winnowing    <span class="t-pass">PASS</span>  app/rows.py: <span class="t-hi">6%</span> (limit 15%)',450],
+    ['jplag        <span class="t-pass">PASS</span>  max <span class="t-hi">0%</span> (limit 30%)',450],
+    ['<span class="t-pass">VERIFY PASSED</span>',400]
+  ];
+  var term=document.getElementById('term'),started=false;
+  function play(){
+    if(started)return;started=true;
+    if(reduce){term.innerHTML=LINES.map(function(l){return l[0];}).join('\n');return;}
+    var i=0,html='';
+    (function next(){
+      if(i>=LINES.length){term.innerHTML=html+'<span class="cursor"></span>';return;}
+      html+=(i?'\n':'')+LINES[i][0];term.innerHTML=html+'<span class="cursor"></span>';
+      setTimeout(next,LINES[i++][1]);
+    })();
+  }
+
+  /* reveal on scroll */
+  if('IntersectionObserver' in window&&!reduce){
+    var io=new IntersectionObserver(function(es){es.forEach(function(e){if(e.isIntersecting){e.target.classList.add('in');io.unobserve(e.target);}});},{rootMargin:'0px 0px -8% 0px'});
+    document.querySelectorAll('.reveal').forEach(function(el){io.observe(el);});
+    var to=new IntersectionObserver(function(es){if(es[0].isIntersecting){play();to.disconnect();}},{threshold:.35});
+    to.observe(term);
+  }else{
+    document.querySelectorAll('.reveal').forEach(function(el){el.classList.add('in');});
+    play();
+  }
+
+  /* replay the hero rewrite every few seconds */
+  var rp=document.getElementById('rightPane');
+  if(!reduce)setInterval(function(){rp.classList.remove('write');void rp.offsetWidth;rp.classList.add('write');},9000);
 })();
 </script>
 </body>

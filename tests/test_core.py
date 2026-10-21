@@ -446,6 +446,35 @@ class TestPathGuard(unittest.TestCase):
         self.assertIsNone(d({"tool_name": "Write", "tool_input": {"file_path": ".cleanroom/contracts/m.md"}, "agent_type": "cleanroom:analyzer", "cwd": "."}, cfg))
 
 
+class TestWebsite(unittest.TestCase):
+    def test_docs_html_is_balanced(self):
+        """An unclosed tag in docs/index.html silently nests every later section inside the hero layout."""
+        from html.parser import HTMLParser
+        void = {"meta", "link", "br", "img", "input", "hr", "source", "path", "circle", "rect", "line"}
+
+        class P(HTMLParser):
+            def __init__(self):
+                super().__init__()
+                self.stack, self.bad = [], []
+
+            def handle_starttag(self, tag, attrs):
+                if tag not in void:
+                    self.stack.append(tag)
+
+            def handle_endtag(self, tag):
+                if tag in void:
+                    return
+                if self.stack and self.stack[-1] == tag:
+                    self.stack.pop()
+                else:
+                    self.bad.append((tag, self.getpos()))
+
+        p = P()
+        p.feed((ROOT / "docs" / "index.html").read_text(encoding="utf-8"))
+        self.assertEqual(p.bad, [])
+        self.assertEqual(p.stack, [])
+
+
 class TestCliHelp(unittest.TestCase):
     def test_every_script_has_help(self):
         for p in sorted((ROOT / "scripts").glob("*.py")):

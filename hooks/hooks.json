@@ -1,0 +1,41 @@
+{
+  "description": "cleanroom: SessionStart installs the add-ons selected in the plugin options (background, once). PreToolUse path guards (secondary to container isolation) and PostToolUse provenance logger are no-ops outside a project with .cleanroom/config.json.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/install_tools.py\" --from-plugin-options --background 2>/dev/null || python \"${CLAUDE_PLUGIN_ROOT}/scripts/install_tools.py\" --from-plugin-options --background",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/path_guard.py\" 2>/dev/null || python \"${CLAUDE_PLUGIN_ROOT}/hooks/path_guard.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/hooks/post_logger.py\" 2>/dev/null || python \"${CLAUDE_PLUGIN_ROOT}/hooks/post_logger.py\"",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

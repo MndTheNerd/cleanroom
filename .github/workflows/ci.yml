@@ -1,0 +1,84 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  unit:
+    name: unit tests (${{ matrix.os }}, py${{ matrix.python }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: python -m pip install pytest
+      - run: python -m unittest -v test_core
+        working-directory: tests
+      - run: python hooks/path_guard.py --self-test
+
+  validate:
+    name: claude plugin validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: npx -y @anthropic-ai/claude-code@2.1.304 plugin validate .
+
+  isolation:
+    # Builds the builder container and egress proxy, then runs the isolation probe:
+    # only /work mounted, upstream canary strings absent, GitHub unreachable directly and via proxy,
+    # external DNS blocked, model API reachable through the proxy, non-root, read-only root fs.
+    name: container isolation probe
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: fake upstream/harness
+        run: |
+          python examples/make_demo.py --dest "$RUNNER_TEMP/demo"
+          python scripts/run_all.py --harness "$RUNNER_TEMP/demo/acme-books" init \
+            --upstream "$RUNNER_TEMP/demo/quillstack" --languages python --test-command "python -m pytest -q" --synthetic-demo
+      - name: isolation probe
+        run: python scripts/sandbox_run.py --harness "$RUNNER_TEMP/demo/acme-books" probe
+      - name: probe report
+        if: always()
+        run: cat "$RUNNER_TEMP/demo/acme-books/.cleanroom/reports/isolation_probe.json" || true
+
+  demo:
+    name: end-to-end demo (stand-in builder)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+      - name: add-ons
+        run: |
+          python -m pip install pytest
+          python scripts/install_tools.py --dest .tools --jplag --scancode
+      - run: python examples/run_demo.py --dest "$RUNNER_TEMP/demo"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: demo-run
+          path: |
+            examples/DEMO_RUN.md
+            examples/sample_output/

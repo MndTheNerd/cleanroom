@@ -1,0 +1,297 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>cleanroom: clean-room rewrites for Claude Code</title>
+<meta name="description" content="A Claude Code plugin that removes leftover third-party code from your project and rewrites it through an isolated clean-room process, with human sign-off and an audit trail.">
+<style>
+:root{
+  --bg:#fbfaf7;--surface:#ffffff;--ink:#1d1f24;--muted:#5b616e;--line:#e4e1d9;
+  --accent:#0f6e5a;--accent-ink:#ffffff;--accent-soft:#e3f2ee;--warn:#8a4b00;--warn-soft:#fdf1e1;
+  --dirty:#a34a28;--dirty-soft:#f9e9e2;--clean:#0f6e5a;--clean-soft:#e3f2ee;--code:#f3f1ec;
+  --radius:10px;--max:1040px;
+  --sans:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,"Cascadia Code",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --bg:#14161a;--surface:#1b1e23;--ink:#e8e6e1;--muted:#a3a8b3;--line:#2c3038;
+  --accent:#4cc2a4;--accent-ink:#0b1714;--accent-soft:#16302a;--warn:#f0b56b;--warn-soft:#2e2416;
+  --dirty:#e58a65;--dirty-soft:#33221b;--clean:#4cc2a4;--clean-soft:#16302a;--code:#22262c;}}
+:root[data-theme="dark"]{
+  --bg:#14161a;--surface:#1b1e23;--ink:#e8e6e1;--muted:#a3a8b3;--line:#2c3038;
+  --accent:#4cc2a4;--accent-ink:#0b1714;--accent-soft:#16302a;--warn:#f0b56b;--warn-soft:#2e2416;
+  --dirty:#e58a65;--dirty-soft:#33221b;--clean:#4cc2a4;--clean-soft:#16302a;--code:#22262c;}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 var(--sans);-webkit-text-size-adjust:100%}
+a{color:var(--accent)}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 16px}
+header.top{position:sticky;top:0;z-index:5;background:color-mix(in srgb,var(--bg) 88%,transparent);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+header.top .wrap{display:flex;align-items:center;gap:16px;height:56px}
+.brand{font-weight:700;letter-spacing:-.01em;text-decoration:none;color:var(--ink);display:flex;align-items:center;gap:8px}
+.brand svg{flex:none}
+nav.links{display:flex;gap:18px;margin-left:auto;font-size:14px}
+nav.links a{color:var(--muted);text-decoration:none}
+nav.links a:hover{color:var(--ink)}
+#theme{margin-left:8px;border:1px solid var(--line);background:var(--surface);color:var(--ink);border-radius:8px;padding:4px 8px;font:inherit;font-size:13px;cursor:pointer}
+@media (max-width:720px){nav.links{display:none}#theme{margin-left:auto}}
+.hero{padding-top:64px;padding-bottom:40px}
+.eyebrow{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--accent)}
+h1{font-size:clamp(30px,5vw,48px);line-height:1.1;letter-spacing:-.02em;margin:10px 0 16px;max-width:20ch}
+.lede{font-size:clamp(17px,2.2vw,20px);color:var(--muted);max-width:62ch;margin:0 0 28px}
+.cta{display:flex;flex-wrap:wrap;gap:12px}
+.btn{display:inline-block;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:15px;border:1px solid var(--line);color:var(--ink);background:var(--surface)}
+.btn.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+section{padding:44px 0;border-top:1px solid var(--line)}
+h2{font-size:clamp(22px,3vw,30px);letter-spacing:-.01em;margin:0 0 8px}
+h3{font-size:18px;margin:26px 0 6px}
+.sub{color:var(--muted);margin:0 0 24px;max-width:70ch}
+.grid{display:grid;gap:16px}
+.g3{grid-template-columns:repeat(auto-fit,minmax(230px,1fr))}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:18px}
+.card h3{margin-top:0}
+.card p{margin:0;color:var(--muted)}
+pre,code{font-family:var(--mono);font-size:14px}
+code{background:var(--code);padding:1px 5px;border-radius:5px}
+pre{background:var(--code);border:1px solid var(--line);border-radius:var(--radius);padding:14px 16px;overflow-x:auto;margin:10px 0 16px;line-height:1.5;position:relative}
+pre code{background:none;padding:0}
+.copy{position:absolute;top:8px;right:8px;font:12px var(--sans);border:1px solid var(--line);background:var(--surface);color:var(--muted);border-radius:6px;padding:2px 8px;cursor:pointer}
+.note{border-left:4px solid var(--warn);background:var(--warn-soft);padding:12px 16px;border-radius:0 var(--radius) var(--radius) 0;margin:16px 0}
+.note strong{color:var(--warn)}
+table{width:100%;border-collapse:collapse;font-size:15px;background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);overflow:hidden}
+th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--line);vertical-align:top}
+th{font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:var(--code)}
+tr:last-child td{border-bottom:none}
+.tablewrap{overflow-x:auto;margin:12px 0 8px}
+ol.steps{list-style:none;padding:0;margin:0;counter-reset:s}
+ol.steps>li{counter-increment:s;position:relative;padding:0 0 26px 52px;border-left:2px solid var(--line);margin-left:16px}
+ol.steps>li:last-child{border-left-color:transparent;padding-bottom:0}
+ol.steps>li::before{content:counter(s);position:absolute;left:-17px;top:-2px;width:32px;height:32px;border-radius:50%;background:var(--accent);color:var(--accent-ink);font-weight:700;display:grid;place-items:center;font-size:15px}
+ol.steps h3{margin:0 0 4px}
+ol.steps p{margin:4px 0;color:var(--muted)}
+.tag{display:inline-block;font-size:12px;font-weight:600;padding:1px 8px;border-radius:999px;background:var(--accent-soft);color:var(--accent);margin-left:6px;vertical-align:2px}
+.tag.you{background:var(--warn-soft);color:var(--warn)}
+.diagram{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px}
+.diagram{overflow-x:auto}
+.diagram svg{width:100%;min-width:720px;height:auto;display:block}
+.dt{fill:var(--ink);font:600 14px var(--sans)}
+.ds{fill:var(--muted);font:12.5px var(--sans)}
+details{background:var(--surface);border:1px solid var(--line);border-radius:var(--radius);padding:12px 16px;margin:10px 0}
+summary{cursor:pointer;font-weight:600}
+details p{color:var(--muted);margin:8px 0 2px}
+footer{border-top:1px solid var(--line);padding:28px 0 48px;color:var(--muted);font-size:14px}
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap">
+  <a class="brand" href="#"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><rect x="2" y="4" width="9" height="16" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="13" y="4" width="9" height="16" rx="2" fill="var(--accent)"/></svg>cleanroom</a>
+  <nav class="links"><a href="#how">How it works</a><a href="#install">Install</a><a href="#use">Use it</a><a href="#gates">Your decisions</a><a href="#limits">Limits</a><a href="https://github.com/MndTheNerd/cleanroom">GitHub</a></nav>
+  <button id="theme" type="button" aria-label="Toggle color theme">Theme</button>
+</div></header>
+
+<main>
+<div class="wrap hero">
+  <div class="eyebrow">Claude Code plugin · open source</div>
+  <h1>Rewrite leftover third-party code. Prove it's gone.</h1>
+  <p class="lede">Your project started from someone else's repository, and their code, names and comments are still in there.
+  <b>cleanroom</b> finds what still matches, has it rebuilt from a description by an AI that is physically walled off from
+  the original, checks the result two independent ways, and asks <i>you</i> every question a tool can't answer.</p>
+  <div class="cta">
+    <a class="btn primary" href="#install">Install in two commands</a>
+    <a class="btn" href="https://github.com/MndTheNerd/cleanroom">View on GitHub</a>
+  </div>
+  <div class="note" style="margin-top:28px"><strong>Not legal advice.</strong> cleanroom produces evidence that you followed a careful
+  process. It gives no legal immunity, AI-run clean rooms haven't been tested in court, and the model may have seen the original
+  code during training. Read <a href="#limits">what it can't enforce</a> before relying on it.</div>
+</div>
+
+<section id="why"><div class="wrap">
+  <h2>Who it's for</h2>
+  <p class="sub">You built your own architecture on top of an upstream open-source project. Now you want to keep your design and
+  replace only the parts that still match upstream, because of its license, because you're going commercial, or because you want
+  a clean codebase. You've tried asking an AI to "rewrite it", and the same session that read the original kept reproducing it.</p>
+  <div class="grid g3">
+    <div class="card"><h3>Finds every leftover</h3><p>Token-level similarity (k-gram winnowing) plus copied identifiers, strings, comments, file names, package metadata, README text, license headers and config keys.</p></div>
+    <div class="card"><h3>Builder never sees the original</h3><p>The rewrite happens in a Docker container that can see only an approved spec folder and can reach only the model API.</p></div>
+    <div class="card"><h3>You decide the hard parts</h3><p>License, agreements, patents, distribution, naming and AI-training risk are plain-language questions. Nothing proceeds until you answer.</p></div>
+    <div class="card"><h3>Two independent checks</h3><p>Every rewritten module must pass the built-in winnowing scan <i>and</i> JPlag, plus its tests and a behavior comparison with the old code.</p></div>
+    <div class="card"><h3>Tamper-evident audit trail</h3><p>Every stage, file hash, command and decision goes into a hash-chained log, committed to git at each step.</p></div>
+    <div class="card"><h3>Runs on your Claude plan</h3><p>Works with a Pro, Max, Team or Enterprise subscription. No API key required (an API key works too).</p></div>
+  </div>
+</div></section>
+
+<section id="how"><div class="wrap">
+  <h2>How it works</h2>
+  <p class="sub">A classic clean room has two teams with a wall between them: one reads the original and writes a description, the
+  other builds from the description alone. cleanroom does the same with AI agents, and makes the wall physical.</p>
+  <div class="diagram" role="img" aria-label="Diagram: the dirty room reads upstream and writes specs, the spec filter and your approval form the wall, the clean room container builds from specs only, then verification and swap.">
+  <svg viewBox="0 0 980 300" xmlns="http://www.w3.org/2000/svg">
+    <defs><marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 z" fill="var(--muted)"/></marker></defs>
+    <rect x="10" y="20" width="280" height="200" rx="12" fill="var(--dirty-soft)" stroke="var(--dirty)"/>
+    <text x="30" y="50" class="dt" fill="var(--dirty)" style="fill:var(--dirty)">Dirty room · your session</text>
+    <text x="30" y="80" class="ds">Analyzer agent reads the upstream</text>
+    <text x="30" y="100" class="ds">and your tainted module</text>
+    <text x="30" y="130" class="ds">Writes a behavior spec:</text>
+    <text x="30" y="150" class="ds">inputs, outputs, errors, limits</text>
+    <text x="30" y="180" class="ds">No code. No upstream names.</text>
+    <text x="30" y="200" class="ds">No copied comments or messages.</text>
+    <rect x="345" y="20" width="110" height="200" rx="12" fill="var(--warn-soft)" stroke="var(--warn)"/>
+    <text x="400" y="50" class="dt" text-anchor="middle" style="fill:var(--warn)">The wall</text>
+    <text x="400" y="85" class="ds" text-anchor="middle">spec filter</text>
+    <text x="400" y="115" class="ds" text-anchor="middle">+ you approve</text>
+    <text x="400" y="145" class="ds" text-anchor="middle">SHA-256</text>
+    <text x="400" y="165" class="ds" text-anchor="middle">manifest</text>
+    <rect x="510" y="20" width="280" height="200" rx="12" fill="var(--clean-soft)" stroke="var(--clean)"/>
+    <text x="530" y="50" class="dt" style="fill:var(--clean)">Clean room · Docker container</text>
+    <text x="530" y="80" class="ds">Sees only: spec, interface contract,</text>
+    <text x="530" y="100" class="ds">style notes, spec-derived tests</text>
+    <text x="530" y="130" class="ds">Network: model API only (proxy)</text>
+    <text x="530" y="150" class="ds">Own credential, different model</text>
+    <text x="530" y="180" class="ds">No memory, no CLAUDE.md,</text>
+    <text x="530" y="200" class="ds">no MCP, no web tools</text>
+    <rect x="845" y="20" width="125" height="200" rx="12" fill="var(--surface)" stroke="var(--line)"/>
+    <text x="907" y="50" class="dt" text-anchor="middle">Verify</text>
+    <text x="907" y="85" class="ds" text-anchor="middle">tests</text>
+    <text x="907" y="110" class="ds" text-anchor="middle">behavior match</text>
+    <text x="907" y="135" class="ds" text-anchor="middle">winnowing</text>
+    <text x="907" y="160" class="ds" text-anchor="middle">JPlag</text>
+    <text x="907" y="195" class="ds" text-anchor="middle">→ swap</text>
+    <line x1="292" y1="120" x2="341" y2="120" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <line x1="457" y1="120" x2="506" y2="120" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <line x1="792" y1="120" x2="841" y2="120" stroke="var(--muted)" stroke-width="2" marker-end="url(#ar)"/>
+    <path d="M907 222 C907 285, 400 285, 400 224" fill="none" stroke="var(--muted)" stroke-width="1.6" stroke-dasharray="5 5" marker-end="url(#ar)"/>
+    <text x="650" y="292" class="ds" text-anchor="middle">if too similar: builder hears only "file X, score N"; spec revised, you re-approve (max 3 tries)</text>
+  </svg></div>
+</div></section>
+
+<section id="install"><div class="wrap">
+  <h2>Install</h2>
+  <p class="sub">You need <a href="https://code.claude.com/docs/en/setup">Claude Code</a>, Python 3.10+, and Docker (Docker Desktop on
+  Windows and macOS, which needs admin rights and on Windows WSL2; or Docker Engine on Linux).</p>
+  <h3>1. Add the plugin</h3>
+  <pre><code>/plugin marketplace add MndTheNerd/cleanroom
+/plugin install cleanroom@cleanroom</code></pre>
+  <h3>2. Pick your options</h3>
+  <p>When you enable the plugin, Claude Code asks you a few questions. Add-ons you select install in the background.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Option</th><th>Default</th><th>What it's for</th></tr>
+    <tr><td>JPlag similarity checker</td><td>on</td><td>Second, independent similarity check (downloads JPlag + a Java 25 runtime, ~150 MB).</td></tr>
+    <tr><td>ScanCode Toolkit</td><td>on</td><td>Final license scan after the swap (~130 MB).</td></tr>
+    <tr><td>ScanCode offline source</td><td>empty</td><td>A ScanCode .zip or .whl you already have, for slow connections.</td></tr>
+    <tr><td>Builder credential</td><td>subscription</td><td>Use your Claude plan, or an API key.</td></tr>
+    <tr><td>Analyzer / builder model</td><td>opus / sonnet</td><td>They must differ.</td></tr>
+  </table></div>
+  <p class="sub" style="margin-top:8px">Turned an add-on off? The step that needs it stops instead of being skipped. Install it later with <code>/cleanroom:addons</code>.</p>
+  <h3 id="subscription">3. Give the builder its own credential</h3>
+  <p>The builder runs in the container with its own credential, never your main login. With a Claude subscription, in <b>your own terminal</b>:</p>
+  <pre><code>claude setup-token</code></pre>
+  <p>Approve in the browser, then set the printed token before starting Claude Code. Never paste it into the chat.</p>
+  <pre><code># macOS / Linux
+export CLEANROOM_BUILDER_OAUTH_TOKEN=paste-token-here
+
+# Windows PowerShell
+$env:CLEANROOM_BUILDER_OAUTH_TOKEN = "paste-token-here"</code></pre>
+  <p class="sub">Builder runs count against your plan's usage limits. Prefer an API key? Set <code>CLEANROOM_BUILDER_API_KEY</code> and pick <code>api_key</code> in the options.</p>
+</div></section>
+
+<section id="use"><div class="wrap">
+  <h2>Use it, step by step</h2>
+  <p class="sub">Open Claude Code in your project (the "harness") and run <code>/cleanroom:run-all</code>, or go stage by stage.
+  Steps marked <span class="tag you">you</span> wait for your answer.</p>
+  <ol class="steps">
+    <li><h3><code>/cleanroom:init</code> <span class="tag you">you</span></h3>
+      <p>Asks, one question at a time, for the upstream repo path, languages and test command. Works on a new <code>cleanroom/&lt;date&gt;</code> git branch.</p>
+      <p>Detects the upstream license and explains it in plain language. Permissive (MIT/Apache/BSD): you're told attribution may be enough, and asked whether to continue anyway.</p></li>
+    <li><h3><code>/cleanroom:risks</code> <span class="tag you">you</span></h3>
+      <p>Six plain-language questions about access, agreements, patents, distribution, the new name, and AI training risk. <a href="#gates">See them below.</a></p></li>
+    <li><h3><code>/cleanroom:scan</code></h3>
+      <p>Compares your project with upstream and labels each module <b>original</b>, <b>mixed</b>, <b>tainted</b> or <b>vendored</b>. Add <code>--dry-run</code> to change nothing.</p></li>
+    <li><h3><code>/cleanroom:spec</code> <span class="tag you">you</span></h3>
+      <p>You approve the list of names kept for compatibility (public API, file formats). The analyzer writes a behavior spec per tainted module, the filter rejects leaks, then you read it and type <code>approve spec</code>.</p></li>
+    <li><h3><code>/cleanroom:build</code></h3>
+      <p>Runs an isolation probe, then the test-writer and builder in the container, with SHA-256 manifest checks before and after.</p></li>
+    <li><h3><code>/cleanroom:verify</code></h3>
+      <p>Tests, behavior comparison with the old module, winnowing and JPlag all have to pass. On failure the spec is revised and you re-approve it (3 tries max).</p></li>
+    <li><h3><code>/cleanroom:swap</code> <span class="tag you">you</span></h3>
+      <p>Shows a one-screen summary. After you type <code>approve swap</code>: backup, swap, delete tainted and vendored files, remove upstream remotes, headers and name, grep for leftovers, run ScanCode.</p></li>
+    <li><h3><code>/cleanroom:report</code></h3>
+      <p>Writes <code>CLEANROOM_REPORT.md</code>: license decision, before/after scores from both tools, what was replaced, test results, ScanCode results, every decision you made, and the risks that remain.</p></li>
+  </ol>
+  <h3>What a run looks like</h3>
+  <p class="sub">From the included demo on fake repositories. A lazy rewrite that copies the original is rejected; an independent one passes:</p>
+  <pre><code>tests        PASS  11 passed
+equivalence  PASS  14/14 cases
+winnowing    FAIL  app/rows.py: 93% (limit 15%), strings 2, comments 3, name 4
+jplag        FAIL  max 100% (limit 30%)
+VERIFY FAILED (attempt 1 of 3)
+...
+winnowing    PASS  app/rows.py: 6% (limit 15%)
+jplag        PASS  max 0% (limit 30%)
+VERIFY PASSED</code></pre>
+</div></section>
+
+<section id="gates"><div class="wrap">
+  <h2>The decisions only you can make</h2>
+  <p class="sub">No defaults. A skipped question keeps the gate closed. Your exact words are recorded with a timestamp. Changing an
+  answer later re-opens the related gates. You can also answer in your own terminal with <code>risk_gate.py ask</code>.</p>
+  <div class="tablewrap"><table>
+    <tr><th>Question</th><th>Why it matters</th><th>To continue</th></tr>
+    <tr><td>Did you get the upstream source legitimately?</td><td>Rewriting can't fix code you weren't allowed to read.</td><td>"yes". No or unsure is a <b>hard stop</b>.</td></tr>
+    <tr><td>Did you agree to other terms (EULA, NDA, employment/client contract)?</td><td>Contracts can forbid this work regardless of copyright.</td><td>"no", or type <code>I accept this risk</code>.</td></tr>
+    <tr><td>Do you know of patents on it?</td><td>Patents cover ideas, not text; a rewrite can still infringe. Upstream is scanned for patent notices.</td><td>"no" with nothing found, or type <code>I accept this risk</code>.</td></tr>
+    <tr><td>Will it be sold, distributed or offered as a service?</td><td>Distribution raises the stakes of everything else.</td><td>Any answer; "yes" adds a pre-release checklist.</td></tr>
+    <tr><td>What's the new project name?</td><td>Trademarks aren't touched by rewriting code.</td><td>A name not close to the upstream's.</td></tr>
+    <tr><td>Do you understand AI training risk?</td><td>The model may have seen the original; similarity scans reduce, not remove, that risk.</td><td>Type <code>I understand</code>.</td></tr>
+  </table></div>
+  <p class="sub" style="margin-top:12px">Later gates: <code>approve allowlist</code>, <code>approve spec</code> (per module, and again after any edit), <code>approve swap</code>, and optionally <code>rewrite history</code>.</p>
+</div></section>
+
+<section id="limits"><div class="wrap">
+  <h2>What it can't enforce</h2>
+  <p class="sub">Be clear-eyed about these. The full list with what to do about each is in <a href="https://github.com/MndTheNerd/cleanroom/blob/main/LIMITATIONS.md">LIMITATIONS.md</a>.</p>
+  <details><summary>The model may remember the original from training</summary><p>Isolation stops it reading the upstream now, not recalling it. The two similarity checks are the mitigation.</p></details>
+  <details><summary>Legal status is untested</summary><p>AI-run clean rooms haven't been tested in court. The report is evidence of process. Get legal review before distributing.</p></details>
+  <details><summary>Close paraphrases in specs</summary><p>The filter catches code, upstream identifiers, long quotes and 8-word copied runs, but not a careful paraphrase of an algorithm. That's why you review every spec.</p></details>
+  <details><summary>Your Docker setup</summary><p>The container design can't be verified until it runs on your machine. Run the isolation probe before your first build, and after Docker updates.</p></details>
+  <details><summary>Git history still holds the original</summary><p>Swapping edits the working tree. An optional, separately confirmed step starts a fresh history; forks and clones keep the old one.</p></details>
+  <details><summary>Trademarks, patents, trade secrets, contracts</summary><p>Clean-room rewriting addresses copyright only. Your answers to the risk questions are recorded and linked in the report.</p></details>
+</div></section>
+
+<section id="faq"><div class="wrap">
+  <h2>FAQ</h2>
+  <details><summary>Do I need an API key?</summary><p>No. With a Claude Pro, Max, Team or Enterprise plan, run <code>claude setup-token</code> once and set <code>CLEANROOM_BUILDER_OAUTH_TOKEN</code>. An API key works too.</p></details>
+  <details><summary>Which languages work?</summary><p>Scanning works on most languages (Python, JavaScript/TypeScript, Java, C/C++, C#, Go, Rust, Ruby, PHP, Swift, Kotlin, Scala, shell). Behavior comparison is built in for Python; other languages need a small driver command.</p></details>
+  <details><summary>Can I try it without touching a real project?</summary><p>Yes: <code>python examples/run_demo.py --dest ./demo</code> builds a fake project pair and runs the whole pipeline.</p></details>
+  <details><summary>The upstream is MIT licensed. Do I need this?</summary><p>Maybe not. Permissive licenses usually only require keeping the copyright notice. The license gate tells you this and asks whether to continue anyway.</p></details>
+</div></section>
+</main>
+
+<footer><div class="wrap">
+  cleanroom is open source (<a href="https://github.com/MndTheNerd/cleanroom/blob/main/LICENSE">LICENSE</a>) ·
+  <a href="https://github.com/MndTheNerd/cleanroom">Source on GitHub</a> ·
+  <a href="https://github.com/MndTheNerd/cleanroom/issues">Report an issue</a><br>
+  Not affiliated with Anthropic. Not legal advice.
+</div></footer>
+
+<script>
+(function(){
+  var root=document.documentElement,btn=document.getElementById('theme'),key='cleanroom-theme';
+  try{var s=localStorage.getItem(key);if(s)root.setAttribute('data-theme',s);}catch(e){}
+  btn.addEventListener('click',function(){
+    var cur=root.getAttribute('data-theme')||(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+    var next=cur==='dark'?'light':'dark';root.setAttribute('data-theme',next);
+    try{localStorage.setItem(key,next);}catch(e){}
+  });
+  document.querySelectorAll('pre').forEach(function(pre){
+    var b=document.createElement('button');b.className='copy';b.type='button';b.textContent='Copy';
+    b.addEventListener('click',function(){
+      var t=pre.querySelector('code').innerText;
+      (navigator.clipboard?navigator.clipboard.writeText(t):Promise.reject()).then(function(){b.textContent='Copied';setTimeout(function(){b.textContent='Copy';},1500);},function(){});
+    });
+    pre.appendChild(b);
+  });
+})();
+</script>
+</body>
+</html>

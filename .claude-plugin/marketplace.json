@@ -1,0 +1,12 @@
+{
+  "name": "cleanroom",
+  "owner": { "name": "MndTheNerd" },
+  "description": "Clean-room rewrite of leftover third-party code, with physical builder isolation, similarity scans, human risk gates and a hash-chained audit trail.",
+  "plugins": [
+    {
+      "name": "cleanroom",
+      "source": "./",
+      "description": "Remove leftover upstream code and rewrite affected modules through an isolated clean-room process."
+    }
+  ]
+}

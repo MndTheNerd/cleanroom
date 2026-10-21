@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "deny": ["WebFetch", "WebSearch", "mcp__*", "Read(//proc/**)", "Read(//home/**)", "Read(//etc/**)"]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "python3", "args": ["/opt/cleanroom/guard.py", "pre"] }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "python3", "args": ["/opt/cleanroom/guard.py", "post"] }
+        ]
+      }
+    ]
+  }
+}

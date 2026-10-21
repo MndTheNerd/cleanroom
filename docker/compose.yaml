@@ -1,0 +1,77 @@
+# Clean-room builder isolation.
+#   - builder sits ONLY on sandbox_net, which is `internal: true` (no route to the outside world).
+#   - proxy sits on sandbox_net AND egress_net; it is the builder's only way out, and squid allows
+#     CONNECT only to the hosts in proxy/allowlist.txt (the model API).
+#   - the only host path mounted into builder is $CLEANROOM_SANDBOX -> /work.
+# Run through scripts/sandbox_run.py, which sets the variables and runs the manifest checks.
+name: cleanroom
+
+services:
+  proxy:
+    build:
+      context: ./proxy
+    networks:
+      sandbox_net:
+        ipv4_address: 172.31.250.2
+      egress_net: {}
+    read_only: true
+    tmpfs:
+      - /var/cache/squid
+      - /var/log/squid
+      - /var/run
+      - /run
+      - /tmp
+    cap_drop: [ALL]
+    cap_add: [SETUID, SETGID]
+    security_opt: ["no-new-privileges:true"]
+    restart: "no"
+
+  builder:
+    build:
+      context: ./builder
+      args:
+        CLAUDE_CODE_VERSION: ${CLAUDE_CODE_VERSION:-2.1.304}
+    depends_on: [proxy]
+    networks:
+      sandbox_net:
+        ipv4_address: 172.31.250.10
+    # External names must not resolve; the proxy is addressed by IP.
+    dns: [127.0.0.1]
+    environment:
+      HTTPS_PROXY: http://172.31.250.2:3128
+      HTTP_PROXY: http://172.31.250.2:3128
+      https_proxy: http://172.31.250.2:3128
+      http_proxy: http://172.31.250.2:3128
+      NO_PROXY: ""
+      # Exactly one of these is set by sandbox_run.py (subscription token or API key), never the host's own credential.
+      CLAUDE_CODE_OAUTH_TOKEN: ${CLEANROOM_BUILDER_OAUTH_TOKEN:-}
+      ANTHROPIC_API_KEY: ${CLEANROOM_BUILDER_API_KEY:-}
+      CLEANROOM_MODEL: ${CLEANROOM_MODEL:-}
+      CLEANROOM_MAX_TURNS: ${CLEANROOM_MAX_TURNS:-150}
+      CLEANROOM_MAX_BUDGET_USD: ${CLEANROOM_MAX_BUDGET_USD:-10}
+      CLEANROOM_CANARIES: ${CLEANROOM_CANARIES:-}
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: "1"
+      DISABLE_AUTOUPDATER: "1"
+      DISABLE_TELEMETRY: "1"
+      DISABLE_ERROR_REPORTING: "1"
+    volumes:
+      - type: bind
+        source: ${CLEANROOM_SANDBOX:?CLEANROOM_SANDBOX must point at the prepared sandbox folder}
+        target: /work
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m
+      - /home/node:size=256m,uid=1000,gid=1000
+    user: "1000:1000"
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    pids_limit: 512
+    mem_limit: 4g
+
+networks:
+  sandbox_net:
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.250.0/24
+  egress_net: {}

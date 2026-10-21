@@ -1,0 +1,16 @@
+[
+  {"function": "split_ledger_line", "args": ["a;b;c"]},
+  {"function": "split_ledger_line", "args": ["  x ; y "]},
+  {"function": "split_ledger_line", "args": ["p;\"q;r\";s"]},
+  {"function": "split_ledger_line", "args": ["m;;n"]},
+  {"function": "split_ledger_line", "args": ["g\"h;i\"j"]},
+  {"function": "split_ledger_line", "args": [""]},
+  {"function": "split_ledger_line", "args": ["u,v", ","]},
+  {"function": "split_ledger_line", "args": ["a;\"b"]},
+  {"function": "column_total", "args": [["k;l;3", "   ", "# skip", "k;l;4"]]},
+  {"function": "column_total", "args": [[]]},
+  {"function": "column_total", "args": [["k;l"]]},
+  {"function": "column_total", "args": [["k;l;many"]]},
+  {"function": "column_total", "args": [["1;2;3;4", "5;6;7;8"], 0]},
+  {"function": "column_total", "args": [["1;2;3;4"], -1]}
+]

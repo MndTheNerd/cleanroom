@@ -1,0 +1,50 @@
+{
+  "name": "cleanroom",
+  "displayName": "Cleanroom",
+  "version": "0.3.0",
+  "description": "Remove leftover third-party code and rewrite affected modules through an isolated clean-room process, with similarity scans, human risk gates and a hash-chained audit trail.",
+  "author": { "name": "MndTheNerd", "url": "https://github.com/MndTheNerd" },
+  "homepage": "https://mndthenerd.github.io/cleanroom/",
+  "repository": "https://github.com/MndTheNerd/cleanroom",
+  "license": "MIT",
+  "keywords": ["clean-room", "license", "provenance", "similarity", "rewrite"],
+  "userConfig": {
+    "install_jplag": {
+      "type": "boolean",
+      "title": "Add-on: JPlag similarity checker",
+      "description": "Download JPlag and a portable Java 25 runtime (about 150 MB) into the plugin's data folder. Verify needs a second, independent similarity check; without this add-on you must point config 'jplag_jar' and 'java' at your own copies.",
+      "default": true
+    },
+    "install_scancode": {
+      "type": "boolean",
+      "title": "Add-on: ScanCode Toolkit license scanner",
+      "description": "Install ScanCode Toolkit (about 130 MB) into its own virtualenv in the plugin's data folder. The final license scan needs it; without this add-on you must set config 'scancode' to your own install.",
+      "default": true
+    },
+    "scancode_source": {
+      "type": "file",
+      "title": "ScanCode offline source (optional)",
+      "description": "A ScanCode Toolkit source .zip, wheel (.whl) or folder you already downloaded. If set, the add-on installs from it instead of downloading from PyPI.",
+      "required": false
+    },
+    "builder_auth": {
+      "type": "string",
+      "title": "Builder credential",
+      "description": "subscription: the builder container uses your Claude Pro/Max/Team/Enterprise plan through a separate token from `claude setup-token` (set CLEANROOM_BUILDER_OAUTH_TOKEN). api_key: it uses an Anthropic API key (set CLEANROOM_BUILDER_API_KEY).",
+      "options": ["subscription", "api_key"],
+      "default": "subscription"
+    },
+    "analyzer_model": {
+      "type": "string",
+      "title": "Analyzer model",
+      "description": "Model for the analyzer (reads upstream, writes specs). Must differ from the builder model.",
+      "default": "opus"
+    },
+    "builder_model": {
+      "type": "string",
+      "title": "Builder / test-writer model",
+      "description": "Model used inside the isolated container. Must differ from the analyzer model.",
+      "default": "sonnet"
+    }
+  }
+}

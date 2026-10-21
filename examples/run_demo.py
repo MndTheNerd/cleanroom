@@ -167,7 +167,8 @@ def main():
 
     say("\n## 6. Tests: the real container path is refused (no Docker), then a stand-in is used")
     sh("run-all tries the test-writer container", "run_all.py", "next", "--run", expect=30)
-    sh("Isolation probe", "sandbox_run.py", "probe", expect=2)
+    # No Docker: the probe can't run (exit 2). With Docker it must pass (exit 0); a failing probe is never accepted.
+    sh("Isolation probe", "sandbox_run.py", "probe", expect=[0, 2], show=20)
     standin("test-writer", 1, INPUTS / "test_writer")
     sh("run-all: captures behavioral fixtures from the OLD module, then tries the builder container", "run_all.py", "next", "--run", expect=30, show=30)
     fx = json.loads((st / "fixtures" / f"{MOD}.json").read_text(encoding="utf-8"))

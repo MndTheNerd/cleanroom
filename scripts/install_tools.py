@@ -72,7 +72,9 @@ def status(dest: Path) -> dict:
 def fetch(url: str, dst: Path):
     print(f"downloading {url}", flush=True)
     tmp = dst.with_suffix(dst.suffix + ".part")
-    with urllib.request.urlopen(url, timeout=300) as r, open(tmp, "wb") as f:
+    # Some hosts (e.g. the Adoptium API) refuse Python's default User-Agent.
+    req = urllib.request.Request(url, headers={"User-Agent": "cleanroom-install-tools/0.3 (+https://github.com/MndTheNerd/cleanroom)"})
+    with urllib.request.urlopen(req, timeout=300) as r, open(tmp, "wb") as f:
         shutil.copyfileobj(r, f, 1 << 20)
     os.replace(tmp, dst)
 

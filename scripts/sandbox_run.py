@@ -64,6 +64,13 @@ def compose(env_extra: dict, *args, timeout: int = 3600):
     return run(["docker", "compose", "-f", str(COMPOSE), *args], env=env, timeout=timeout)
 
 
+def teardown(env: dict) -> str:
+    """Capture the egress proxy's log (what it allowed/denied), then stop and remove the containers."""
+    log = compose(env, "logs", "--no-color", "--tail", "60", "proxy", timeout=120)
+    compose(env, "down", "--remove-orphans", timeout=300)
+    return (log.stdout + log.stderr)[-4000:]
+
+
 def probe(state: Path) -> int:
     ok, info = docker_ok()
     if not ok:
@@ -77,11 +84,14 @@ def probe(state: Path) -> int:
     (sandbox / "out").mkdir(parents=True)
     (sandbox / "README.txt").write_text("isolation probe sandbox\n", encoding="utf-8")
     cans = canaries(Path(cfg["upstream"]), cfg["exclude"])
-    r = compose({"CLEANROOM_SANDBOX": str(sandbox.resolve()), "CLEANROOM_CANARIES": "\n".join(cans)},
-                "run", "--rm", "--build", "builder", "probe", timeout=1800)
+    env = {"CLEANROOM_SANDBOX": str(sandbox.resolve()), "CLEANROOM_CANARIES": "\n".join(cans)}
+    try:
+        r = compose(env, "run", "--rm", "--build", "builder", "probe", timeout=1800)
+    finally:
+        proxy_log = teardown(env)
     checks = [json.loads(l) for l in r.stdout.splitlines() if l.startswith("{")]
     result = {"ok": r.returncode == 0 and bool(checks) and all(c["ok"] for c in checks), "checks": checks,
-              "docker": info, "stderr_tail": r.stderr[-1500:]}
+              "docker": info, "stderr_tail": r.stderr[-1500:], "proxy_log_tail": proxy_log}
     write_json(state / "reports" / "isolation_probe.json", result)
     provenance_log.append(state, "probe", "script", commands=["docker compose run --rm builder probe"],
                           decision={"ok": result["ok"], "failed": [c["check"] for c in checks if not c["ok"]]})
@@ -136,8 +146,12 @@ def run_role(state: Path, module: str, role: str, attempt: int) -> int:
         print("ABORT: manifest pre-check failed:\n  " + "\n  ".join(pre["problems"]), file=sys.stderr)
         provenance_log.append(state, "build", "script", decision={"abort": "manifest pre-check", "problems": pre["problems"]})
         return 1
-    r = compose({"CLEANROOM_SANDBOX": str(sandbox.resolve()), "CLEANROOM_MODEL": model, **cred_env},
-                "run", "--rm", "--build", "builder", role)
+    run_env = {"CLEANROOM_SANDBOX": str(sandbox.resolve()), "CLEANROOM_MODEL": model, **cred_env}
+    try:
+        r = compose(run_env, "run", "--rm", "--build", "builder", role)
+    finally:
+        proxy_log = teardown({k: v for k, v in run_env.items() if k == "CLEANROOM_SANDBOX"})
+    write_json(state / "reports" / f"proxy_{module}_{role}.json", {"proxy_log_tail": proxy_log})
     post = manifest_check.check(sandbox, approved, "post")
     write_json(state / "manifests" / f"{module}-{role}.post.json", post)
     tool_log = sandbox / "out" / "_log" / "tool_calls.jsonl"

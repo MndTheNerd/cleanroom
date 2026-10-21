@@ -37,7 +37,13 @@ if getent hosts github.com >/dev/null 2>&1; then dns=resolved; else dns=failed; 
 emit external_dns_blocked "failed" "$dns" "external DNS resolution"
 
 # 4. The model API must be reachable through the proxy (any HTTP status proves the tunnel works).
-code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://api.anthropic.com/v1/models 2>/dev/null); [ -z "$code" ] && code=000
+#    Retry briefly: the proxy may still be starting.
+code=000
+for _ in 1 2 3 4 5 6; do
+  code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 15 https://api.anthropic.com/v1/models 2>/dev/null); [ -z "$code" ] && code=000
+  [ "$code" != "000" ] && break
+  sleep 3
+done
 if [ "$code" = "000" ]; then api=unreachable; else api=reachable; fi
 emit model_api_reachable "reachable" "$api" "HTTP $code"
 

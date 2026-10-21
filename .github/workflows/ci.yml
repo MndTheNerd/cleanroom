@@ -56,7 +56,9 @@ jobs:
         run: python scripts/sandbox_run.py --harness "$RUNNER_TEMP/demo/acme-books" probe
       - name: probe report
         if: always()
-        run: cat "$RUNNER_TEMP/demo/acme-books/.cleanroom/reports/isolation_probe.json" || true
+        run: |
+          python -c "import json,sys; r=json.load(open(sys.argv[1])); [print(('PASS ' if c['ok'] else 'FAIL ')+c['check'], c['detail']) for c in r['checks']]; print('--- proxy log'); print(r.get('proxy_log_tail',''))" \
+            "$RUNNER_TEMP/demo/acme-books/.cleanroom/reports/isolation_probe.json" || true
 
   demo:
     name: end-to-end demo (stand-in builder)
